@@ -3,7 +3,7 @@ yarn.lock
 npm-debug.log
 node_modules/
 sftp-config.json
-config.json
+# config.json
 jsconfig.json
 public/src/nodebb.min.js
 !src/views/config.json
@@ -41,7 +41,7 @@ pidfile
 /public/installer.css
 /public/installer.min.js
 /public/bootstrap.min.css
-/public/logo.png
+# /public/logo.png
 
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio
 *.iml
@@ -65,7 +65,11 @@ coverage
 *.log
 test/files/normalise.jpg.png
 test/files/normalise-resized.jpg
-package-lock.json
-/package.json
+# package-lock.json
+# /package.json
 *.mongodb
 link-plugins.sh
+
+"*": [
+  "git add"
+]
