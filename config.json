@@ -1,14 +1,14 @@
 {
     "url": "http://localhost:4567",
-    "secret": "10882016-9d91-4ca5-96ba-e266516b4229",
+    "secret": "d8300394-db19-4426-bdd3-ad5e9da500e8",
     "database": "mongo",
+    "port": "4567",
     "mongo": {
-        "host": "127.0.0.1",
+        "host": "ec2-3-144-134-42.us-east-2.compute.amazonaws.com",
         "port": "27017",
         "username": "nodebb",
         "password": "pw@nodeBB11",
         "database": "nodebb",
         "uri": ""
-    },
-    "port": "4567"
+    }
 }
