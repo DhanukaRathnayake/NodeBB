@@ -1,45 +1,27 @@
+/* eslint-disable no-await-in-loop */
+
 'use strict';
 
-var async = require('async');
-var db = require('../../database');
-var privileges = require('../../privileges');
-var groups = require('../../groups');
+const db = require('../../database');
+const privileges = require('../../privileges');
+const groups = require('../../groups');
 
 module.exports = {
 	name: 'give mod info privilege',
 	timestamp: Date.UTC(2019, 9, 8),
-	method: function (callback) {
-		async.waterfall([
-			function (next) {
-				db.getSortedSetRevRange('categories:cid', 0, -1, next);
-			},
-			function (cids, next) {
-				async.eachSeries(cids, function (cid, next) {
-					async.waterfall([
-						function (next) {
-							givePrivsToModerators(cid, '', next);
-						},
-						function (next) {
-							givePrivsToModerators(cid, 'groups:', next);
-						},
-					], next);
-				}, next);
-			},
-			function (next) {
-				privileges.global.give(['groups:view:users:info'], 'Global Moderators', next);
-			},
-		], callback);
-		function givePrivsToModerators(cid, groupPrefix, callback) {
-			async.waterfall([
-				function (next) {
-					db.getSortedSetRevRange('group:cid:' + cid + ':privileges:' + groupPrefix + 'moderate:members', 0, -1, next);
-				},
-				function (members, next) {
-					async.eachSeries(members, function (member, next) {
-						groups.join(['cid:0:privileges:view:users:info'], member, next);
-					}, next);
-				},
-			], callback);
+	method: async function () {
+		const cids = await db.getSortedSetRevRange('categories:cid', 0, -1);
+		for (const cid of cids) {
+			await givePrivsToModerators(cid, '');
+			await givePrivsToModerators(cid, 'groups:');
+		}
+		await privileges.global.give(['groups:view:users:info'], 'Global Moderators');
+
+		async function givePrivsToModerators(cid, groupPrefix) {
+			const members = await db.getSortedSetRevRange(`group:cid:${cid}:privileges:${groupPrefix}moderate:members`, 0, -1);
+			for (const member of members) {
+				await groups.join(['cid:0:privileges:view:users:info'], member);
+			}
 		}
 	},
 };

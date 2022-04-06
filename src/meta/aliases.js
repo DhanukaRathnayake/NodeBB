@@ -1,6 +1,7 @@
 'use strict';
 
 const _ = require('lodash');
+const chalk = require('chalk');
 
 const aliases = {
 	'plugin static dirs': ['staticdirs'],
@@ -22,22 +23,20 @@ const aliases = {
 exports.aliases = aliases;
 
 function buildTargets() {
-	var length = 0;
-	var output = Object.keys(aliases).map(function (name) {
-		var arr = aliases[name];
+	let length = 0;
+	const output = Object.keys(aliases).map((name) => {
+		const arr = aliases[name];
 		if (name.length > length) {
 			length = name.length;
 		}
 
 		return [name, arr.join(', ')];
-	}).map(function (tuple) {
-		return '     ' + _.padEnd('"' + tuple[0] + '"', length + 2).magenta + '  |  ' + tuple[1];
-	}).join('\n');
-	console.log(
+	}).map(tuple => `     ${chalk.magenta(_.padEnd(`"${tuple[0]}"`, length + 2))}  |  ${tuple[1]}`).join('\n');
+	process.stdout.write(
 		'\n\n  Build targets:\n' +
-		('\n     ' + _.padEnd('Target', length + 2) + '  |  Aliases').green +
-		'\n     ------------------------------------------------------\n'.blue +
-		output + '\n'
+		`${chalk.green(`\n     ${_.padEnd('Target', length + 2)}  |  Aliases`)}` +
+		`${chalk.blue('\n     ------------------------------------------------------\n')}` +
+		`${output}\n\n`
 	);
 }
 

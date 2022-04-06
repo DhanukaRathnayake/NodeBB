@@ -2,10 +2,11 @@
 	"state": "מצב",
 	"reports": "דוחות",
 	"first-reported": "דווח ראשון",
-	"no-flags": "מופלטה! לא נמצאו סימונים.",
+	"no-flags": "הידד! לא נמצאו סימונים.",
 	"assignee": "מוקצה",
 	"update": "עדכון",
 	"updated": "עודכן",
+	"resolved": "הושלם",
 	"target-purged": "התוכן שסומן נוקה ולא קיים יותר.",
 
 	"graph-label": "דיווחים יומיים",
@@ -26,6 +27,7 @@
 	"filter-cid-all": "כל הקטגוריות",
 	"apply-filters": "הפעל סינון",
 	"more-filters": "מסננים נוספים",
+	"fewer-filters": "פחות מסננים",
 
 	"quick-actions": "פעולות מהירות",
 	"flagged-user": "משתמש מסומן",
@@ -75,12 +77,10 @@
 	"modal-reason-custom": "הסיבה לדיווח על התוכן...",
 	"modal-submit": "שלח דוח",
 	"modal-submit-success": "התוכן סומן לצרכי בקרה",
-	"modal-submit-confirm": "אשר שליחה",
-	"modal-submit-confirm-text": "כבר ציינת סיבה. האם אתה בטוח שאתה רוצה לשלוח על ידי דיווח-מהיר?",
-	"modal-submit-confirm-text-help": "שליחת דיווח מהיר תבטל כל סיבה קודמת שהוגדרה.",
 
 	"bulk-actions": "פעולות כלליות",
-	"bulk-resolve": "השלם דיווחים",
+	"bulk-resolve": "השלם דיווח(ים)",
 	"bulk-success": "%1 דיווחים עודכנו",
-	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)"
+	"flagged-timeago-readable": "מדווחים <span class=\"timeago\" title=\"%1\"></span> (%2)",
+  	"auto-flagged": "[Auto Flagged] Received %1 downvotes."
 }

@@ -6,6 +6,7 @@
 	"assignee": "Tilldelad",
 	"update": "Uppdatera",
 	"updated": "Uppdatering",
+	"resolved": "Resolved",
 	"target-purged": "Innehållet denna flagga refererar till har rensats bort och är inte längre tillgängligt.",
 
 	"graph-label": "Dagliga flaggningar",
@@ -26,6 +27,7 @@
 	"filter-cid-all": "Alla kategorier",
 	"apply-filters": "Applicera filter",
 	"more-filters": "More Filters",
+	"fewer-filters": "Fewer Filters",
 
 	"quick-actions": "Quick Actions",
 	"flagged-user": "Flaggad användare",
@@ -75,12 +77,10 @@
 	"modal-reason-custom": "Anledning för rapportering av detta innehåll...",
 	"modal-submit": "Skicka in rapport",
 	"modal-submit-success": "Innehållet har flaggats för moderering.",
-	"modal-submit-confirm": "Bekräfta inskickning",
-	"modal-submit-confirm-text": "Du har redan en specifik anledning vald. Vill du verkligen skicka in en snabbrapport?",
-	"modal-submit-confirm-text-help": "Om du skickar in en snabbrapport så förlorar du de specifika motivationer du angivit.",
 
 	"bulk-actions": "Bulk Actions",
 	"bulk-resolve": "Resolve Flag(s)",
 	"bulk-success": "%1 flags updated",
-	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)"
+	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)",
+  	"auto-flagged": "[Auto Flagged] Received %1 downvotes."
 }

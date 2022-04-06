@@ -20,6 +20,7 @@ require('./rooms')(Messaging);
 require('./unread')(Messaging);
 require('./notifications')(Messaging);
 
+Messaging.messageExists = async mid => db.exists(`message:${mid}`);
 
 Messaging.getMessages = async (params) => {
 	const isNew = params.isNew || false;
@@ -32,17 +33,17 @@ Messaging.getMessages = async (params) => {
 		return;
 	}
 
-	const mids = await db.getSortedSetRevRange('uid:' + params.uid + ':chat:room:' + params.roomId + ':mids', start, stop);
+	const mids = await db.getSortedSetRevRange(`uid:${params.uid}:chat:room:${params.roomId}:mids`, start, stop);
 	if (!mids.length) {
 		return [];
 	}
-	mids.forEach(function (mid, index) {
+	mids.forEach((mid, index) => {
 		indices[mid] = start + index;
 	});
 	mids.reverse();
 
 	const messageData = await Messaging.getMessagesData(mids, params.uid, params.roomId, isNew);
-	messageData.forEach(function (messageData) {
+	messageData.forEach((messageData) => {
 		messageData.index = indices[messageData.messageId.toString()];
 		messageData.isOwner = messageData.fromuid === parseInt(params.uid, 10);
 		if (messageData.deleted && !messageData.isOwner) {
@@ -64,7 +65,7 @@ async function canGet(hook, callerUid, uid) {
 }
 
 Messaging.parse = async (message, fromuid, uid, roomId, isNew) => {
-	const parsed = await plugins.hooks.fire('filter:parse.raw', message);
+	const parsed = await plugins.hooks.fire('filter:parse.raw', String(message || ''));
 	let messageData = {
 		message: message,
 		parsed: parsed,
@@ -80,7 +81,7 @@ Messaging.parse = async (message, fromuid, uid, roomId, isNew) => {
 };
 
 Messaging.isNewSet = async (uid, roomId, timestamp) => {
-	const setKey = 'uid:' + uid + ':chat:room:' + roomId + ':mids';
+	const setKey = `uid:${uid}:chat:room:${roomId}:mids`;
 	const messages = await db.getSortedSetRevRangeWithScores(setKey, 0, 0);
 	if (messages && messages.length) {
 		return parseInt(timestamp, 10) > parseInt(messages[0].score, 10) + Messaging.newMessageCutoff;
@@ -94,33 +95,31 @@ Messaging.getRecentChats = async (callerUid, uid, start, stop) => {
 		return null;
 	}
 
-	const roomIds = await db.getSortedSetRevRange('uid:' + uid + ':chat:rooms', start, stop);
+	const roomIds = await db.getSortedSetRevRange(`uid:${uid}:chat:rooms`, start, stop);
 	const results = await utils.promiseParallel({
 		roomData: Messaging.getRoomsData(roomIds),
-		unread: db.isSortedSetMembers('uid:' + uid + ':chat:rooms:unread', roomIds),
+		unread: db.isSortedSetMembers(`uid:${uid}:chat:rooms:unread`, roomIds),
 		users: Promise.all(roomIds.map(async (roomId) => {
-			let uids = await db.getSortedSetRevRange('chat:room:' + roomId + ':uids', 0, 9);
+			let uids = await db.getSortedSetRevRange(`chat:room:${roomId}:uids`, 0, 9);
 			uids = uids.filter(_uid => _uid && parseInt(_uid, 10) !== parseInt(uid, 10));
 			return await user.getUsersFields(uids, ['uid', 'username', 'userslug', 'picture', 'status', 'lastonline']);
 		})),
 		teasers: Promise.all(roomIds.map(async roomId => Messaging.getTeaser(uid, roomId))),
 	});
 
-	results.roomData.forEach(function (room, index) {
+	results.roomData.forEach((room, index) => {
 		if (room) {
 			room.users = results.users[index];
 			room.groupChat = room.hasOwnProperty('groupChat') ? room.groupChat : room.users.length > 2;
 			room.unread = results.unread[index];
 			room.teaser = results.teasers[index];
 
-			room.users.forEach(function (userData) {
+			room.users.forEach((userData) => {
 				if (userData && parseInt(userData.uid, 10)) {
 					userData.status = user.getStatus(userData);
 				}
 			});
-			room.users = room.users.filter(function (user) {
-				return user && parseInt(user.uid, 10);
-			});
+			room.users = room.users.filter(user => user && parseInt(user.uid, 10));
 			room.lastUser = room.users[0];
 
 			room.usernames = Messaging.generateUsernames(room.users, uid);
@@ -172,7 +171,7 @@ Messaging.getLatestUndeletedMessage = async (uid, roomId) => {
 
 	while (!done) {
 		/* eslint-disable no-await-in-loop */
-		mids = await db.getSortedSetRevRange('uid:' + uid + ':chat:room:' + roomId + ':mids', index, index);
+		mids = await db.getSortedSetRevRange(`uid:${uid}:chat:room:${roomId}:mids`, index, index);
 		if (mids.length) {
 			const states = await Messaging.getMessageFields(mids[0], ['deleted', 'system']);
 			done = !states.deleted && !states.system;
@@ -189,36 +188,35 @@ Messaging.getLatestUndeletedMessage = async (uid, roomId) => {
 };
 
 Messaging.canMessageUser = async (uid, toUid) => {
-	if (meta.config.disableChat || uid <= 0 || uid === toUid) {
+	if (meta.config.disableChat || uid <= 0) {
 		throw new Error('[[error:chat-disabled]]');
 	}
 
 	if (parseInt(uid, 10) === parseInt(toUid, 10)) {
-		throw new Error('[[error:cant-chat-with-yourself');
+		throw new Error('[[error:cant-chat-with-yourself]]');
 	}
+	const [exists, canChat] = await Promise.all([
+		user.exists(toUid),
+		privileges.global.can('chat', uid),
+	]);
 
-	const exists = await user.exists(toUid);
 	if (!exists) {
 		throw new Error('[[error:no-user]]');
 	}
 
-	const userData = await user.getUserFields(uid, ['banned']);
-	if (userData.banned) {
-		throw new Error('[[error:user-banned]]');
-	}
-	const canChat = await privileges.global.can('chat', uid);
 	if (!canChat) {
 		throw new Error('[[error:no-privileges]]');
 	}
 
-	const results = await utils.promiseParallel({
-		settings: user.getSettings(toUid),
-		isAdmin: user.isAdministrator(uid),
-		isModerator: user.isModeratorOfAnyCategory(uid),
-		isFollowing: user.isFollowing(toUid, uid),
-	});
+	const [settings, isAdmin, isModerator, isFollowing, isBlocked] = await Promise.all([
+		user.getSettings(toUid),
+		user.isAdministrator(uid),
+		user.isModeratorOfAnyCategory(uid),
+		user.isFollowing(toUid, uid),
+		user.blocks.is(uid, toUid),
+	]);
 
-	if (results.settings.restrictChat && !results.isAdmin && !results.isModerator && !results.isFollowing) {
+	if (isBlocked || (settings.restrictChat && !isAdmin && !isModerator && !isFollowing)) {
 		throw new Error('[[error:chat-restricted]]');
 	}
 
@@ -238,10 +236,6 @@ Messaging.canMessageRoom = async (uid, roomId) => {
 		throw new Error('[[error:not-in-room]]');
 	}
 
-	const userData = await user.getUserFields(uid, ['banned']);
-	if (userData.banned) {
-		throw new Error('[[error:user-banned]]');
-	}
 	const canChat = await privileges.global.can('chat', uid);
 	if (!canChat) {
 		throw new Error('[[error:no-privileges]]');
@@ -259,19 +253,17 @@ Messaging.hasPrivateChat = async (uid, withUid) => {
 	}
 
 	const results = await utils.promiseParallel({
-		myRooms: db.getSortedSetRevRange('uid:' + uid + ':chat:rooms', 0, -1),
-		theirRooms: db.getSortedSetRevRange('uid:' + withUid + ':chat:rooms', 0, -1),
+		myRooms: db.getSortedSetRevRange(`uid:${uid}:chat:rooms`, 0, -1),
+		theirRooms: db.getSortedSetRevRange(`uid:${withUid}:chat:rooms`, 0, -1),
 	});
-	const roomIds = results.myRooms.filter(function (roomId) {
-		return roomId && results.theirRooms.includes(roomId);
-	});
+	const roomIds = results.myRooms.filter(roomId => roomId && results.theirRooms.includes(roomId));
 
 	if (!roomIds.length) {
 		return 0;
 	}
 
-	var index = 0;
-	var roomId = 0;
+	let index = 0;
+	let roomId = 0;
 	while (index < roomIds.length && !roomId) {
 		/* eslint-disable no-await-in-loop */
 		const count = await Messaging.getUserCountInRoom(roomIds[index]);
@@ -283,6 +275,17 @@ Messaging.hasPrivateChat = async (uid, withUid) => {
 	}
 
 	return roomId;
+};
+
+Messaging.canViewMessage = async (mids, roomId, uid) => {
+	let single = false;
+	if (!Array.isArray(mids) && isFinite(mids)) {
+		mids = [mids];
+		single = true;
+	}
+
+	const canView = await db.isSortedSetMembers(`uid:${uid}:chat:room:${roomId}:mids`, mids);
+	return single ? canView.pop() : canView;
 };
 
 require('../promisify')(Messaging);

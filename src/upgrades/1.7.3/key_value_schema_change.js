@@ -1,72 +1,45 @@
+/* eslint-disable no-await-in-loop */
+
 'use strict';
 
-var async = require('async');
-
-var db = require('../../database');
+const db = require('../../database');
 
 module.exports = {
 	name: 'Change the schema of simple keys so they don\'t use value field (mongodb only)',
 	timestamp: Date.UTC(2017, 11, 18),
-	method: function (callback) {
-		var configJSON;
+	method: async function () {
+		let configJSON;
 		try {
 			configJSON = require('../../../config.json') || { [process.env.database]: true, database: process.env.database };
 		} catch (err) {
 			configJSON = { [process.env.database]: true, database: process.env.database };
 		}
-		var isMongo = configJSON.hasOwnProperty('mongo') && configJSON.database === 'mongo';
-		var progress = this.progress;
+		const isMongo = configJSON.hasOwnProperty('mongo') && configJSON.database === 'mongo';
+		const { progress } = this;
 		if (!isMongo) {
-			return callback();
+			return;
 		}
-		var client = db.client;
-		var cursor;
-		async.waterfall([
-			function (next) {
-				client.collection('objects').countDocuments({
-					_key: { $exists: true },
-					value: { $exists: true },
-					score: { $exists: false },
-				}, next);
-			},
-			function (count, next) {
-				progress.total = count;
-				cursor = client.collection('objects').find({
-					_key: { $exists: true },
-					value: { $exists: true },
-					score: { $exists: false },
-				}).batchSize(1000);
+		const { client } = db;
+		const query = {
+			_key: { $exists: true },
+			value: { $exists: true },
+			score: { $exists: false },
+		};
+		progress.total = await client.collection('objects').countDocuments(query);
+		const cursor = await client.collection('objects').find(query).batchSize(1000);
 
-				var done = false;
-				async.whilst(
-					function (next) {
-						next(null, !done);
-					},
-					function (next) {
-						async.waterfall([
-							function (next) {
-								cursor.next(next);
-							},
-							function (item, next) {
-								progress.incr();
-								if (item === null) {
-									done = true;
-									return next();
-								}
-								delete item.expireAt;
-								if (Object.keys(item).length === 3 && item.hasOwnProperty('_key') && item.hasOwnProperty('value')) {
-									client.collection('objects').updateOne({ _key: item._key }, { $rename: { value: 'data' } }, next);
-								} else {
-									next();
-								}
-							},
-						], function (err) {
-							next(err);
-						});
-					},
-					next
-				);
-			},
-		], callback);
+		let done = false;
+		while (!done) {
+			const item = await cursor.next();
+			progress.incr();
+			if (item === null) {
+				done = true;
+			} else {
+				delete item.expireAt;
+				if (Object.keys(item).length === 3 && item.hasOwnProperty('_key') && item.hasOwnProperty('value')) {
+					await client.collection('objects').updateOne({ _key: item._key }, { $rename: { value: 'data' } });
+				}
+			}
+		}
 	},
 };

@@ -13,7 +13,9 @@ module.exports = function (Groups) {
 		if (!options.hideEphemeralGroups) {
 			groupNames = Groups.ephemeralGroups.concat(groupNames);
 		}
-		groupNames = groupNames.filter(name => name.toLowerCase().includes(query) && !Groups.isPrivilegeGroup(name));
+		groupNames = groupNames.filter(name => name.toLowerCase().includes(query) &&
+			name !== Groups.BANNED_USERS && // hide banned-users in searches
+			!Groups.isPrivilegeGroup(name));
 		groupNames = groupNames.slice(0, 100);
 
 		let groupsData;
@@ -40,7 +42,7 @@ module.exports = function (Groups) {
 				groups.sort((a, b) => b.createtime - a.createtime);
 				break;
 
-			case 'alpha':	// intentional fall-through
+			case 'alpha': // intentional fall-through
 			default:
 				groups.sort((a, b) => (a.slug > b.slug ? 1 : -1));
 		}
@@ -63,13 +65,13 @@ module.exports = function (Groups) {
 		const uids = results.users.map(user => user && user.uid);
 		const isOwners = await Groups.ownership.isOwners(uids, data.groupName);
 
-		results.users.forEach(function (user, index) {
+		results.users.forEach((user, index) => {
 			if (user) {
 				user.isOwner = isOwners[index];
 			}
 		});
 
-		results.users.sort(function (a, b) {
+		results.users.sort((a, b) => {
 			if (a.isOwner && !b.isOwner) {
 				return -1;
 			} else if (!a.isOwner && b.isOwner) {

@@ -1,5 +1,10 @@
 {
-	"dashboard": "仪表盘",
+	"section-dashboard": "仪表盘",
+	"dashboard/overview": "概览",
+	"dashboard/logins": "登录",
+	"dashboard/users": "用户",
+	"dashboard/topics": "主题",
+	"dashboard/searches": "Searches",
 	"section-general": "基本",
 
 	"section-manage": "管理",
@@ -39,7 +44,7 @@
 	"settings/sockets": "套接字",
 	"settings/advanced": "高级",
 
-	"settings.page-title": "1% 设置",
+	"settings.page-title": "%1 设置",
 
 	"section-appearance": "界面",
 	"appearance/themes": "主题",

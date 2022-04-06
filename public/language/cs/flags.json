@@ -6,6 +6,7 @@
 	"assignee": "Nabyvatel",
 	"update": "Aktualizovat",
 	"updated": "Aktualizováno",
+	"resolved": "Resolved",
 	"target-purged": "Obsah, na který se toto označení vztahuje, byl vymazán a již není k dispozici.",
 
 	"graph-label": "Denní označení",
@@ -26,6 +27,7 @@
 	"filter-cid-all": "Všechny kategorie",
 	"apply-filters": "Použít filtry",
 	"more-filters": "More Filters",
+	"fewer-filters": "Fewer Filters",
 
 	"quick-actions": "Quick Actions",
 	"flagged-user": "Označený uživatel",
@@ -75,12 +77,10 @@
 	"modal-reason-custom": "Důvod ohlášení tohoto obsahu…",
 	"modal-submit": "Předat hlášení",
 	"modal-submit-success": "Obsah byl označen pro moderaci.",
-	"modal-submit-confirm": "Potvrdit hlášení",
-	"modal-submit-confirm-text": "Již jste zadal/a nějaký důvod. Jste si jist/a, že chcete nahlásit pomocí rychlé zprávy?",
-	"modal-submit-confirm-text-help": "Zaslání rychlé zprávy přepíše jiné zadané důvody.",
 
 	"bulk-actions": "Bulk Actions",
 	"bulk-resolve": "Resolve Flag(s)",
 	"bulk-success": "%1 flags updated",
-	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)"
+	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)",
+  	"auto-flagged": "[Auto Flagged] Received %1 downvotes."
 }

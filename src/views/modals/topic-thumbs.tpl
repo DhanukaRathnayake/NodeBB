@@ -5,7 +5,7 @@
 	{{{ each thumbs }}}
 	<div class="media" data-id="{./id}" data-path="{./url}">
 		<div class="media-left">
-			<img class="media-object" src="{./url}" />
+			<img class="media-object" src="{./url}" alt="" />
 		</div>
 		<div class="media-body">
 			<p>
@@ -14,7 +14,7 @@
 			<button class="btn btn-danger" data-action="remove"><i class="fa fa-times"></i> [[modules:thumbs.modal.remove]]</button>
 		</div>
 	</div>
-	<hr />
 	{{{ end }}}
+	<hr />
 	<p class="help-block">[[modules:thumbs.modal.resize-note, {config.thumbs.size}]]</p>
 </div>

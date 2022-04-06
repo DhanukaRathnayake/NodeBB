@@ -1,15 +1,18 @@
 
 'use strict';
 
-var _ = require('lodash');
-var validator = require('validator');
+const _ = require('lodash');
+const validator = require('validator');
+const nconf = require('nconf');
 
-var db = require('../database');
-var user = require('../user');
-var posts = require('../posts');
-var meta = require('../meta');
-var plugins = require('../plugins');
-var utils = require('../../public/src/utils');
+const db = require('../database');
+const user = require('../user');
+const posts = require('../posts');
+const meta = require('../meta');
+const plugins = require('../plugins');
+const utils = require('../../public/src/utils');
+
+const backlinkRegex = new RegExp(`(?:${nconf.get('url').replace('/', '\\/')}|\b|\\s)\\/topic\\/(\\d+)(?:\\/\\w+)?`, 'g');
 
 module.exports = function (Topics) {
 	Topics.onNewPostMade = async function (postData) {
@@ -17,12 +20,88 @@ module.exports = function (Topics) {
 		await Topics.addPostToTopic(postData.tid, postData);
 	};
 
-	Topics.getTopicPosts = async function (tid, set, start, stop, uid, reverse) {
-		const postData = await posts.getPostsFromSet(set, start, stop, uid, reverse);
-		Topics.calculatePostIndices(postData, start);
+	Topics.getTopicPosts = async function (topicData, set, start, stop, uid, reverse) {
+		if (!topicData) {
+			return [];
+		}
 
-		return await Topics.addPostData(postData, uid);
+		let repliesStart = start;
+		let repliesStop = stop;
+		if (stop > 0) {
+			repliesStop -= 1;
+			if (start > 0) {
+				repliesStart -= 1;
+			}
+		}
+		let pids = [];
+		if (start !== 0 || stop !== 0) {
+			pids = await posts.getPidsFromSet(set, repliesStart, repliesStop, reverse);
+		}
+		if (!pids.length && !topicData.mainPid) {
+			return [];
+		}
+
+		if (topicData.mainPid && start === 0) {
+			pids.unshift(topicData.mainPid);
+		}
+		let postData = await posts.getPostsByPids(pids, uid);
+		if (!postData.length) {
+			return [];
+		}
+		let replies = postData;
+		if (topicData.mainPid && start === 0) {
+			postData[0].index = 0;
+			replies = postData.slice(1);
+		}
+
+		Topics.calculatePostIndices(replies, repliesStart);
+		await addEventStartEnd(postData, set, reverse, topicData);
+		const allPosts = postData.slice();
+		postData = await user.blocks.filter(uid, postData);
+		if (allPosts.length !== postData.length) {
+			const includedPids = new Set(postData.map(p => p.pid));
+			allPosts.reverse().forEach((p, index) => {
+				if (!includedPids.has(p.pid) && allPosts[index + 1] && !reverse) {
+					allPosts[index + 1].eventEnd = p.eventEnd;
+				}
+			});
+		}
+
+		const result = await plugins.hooks.fire('filter:topic.getPosts', {
+			topic: topicData,
+			uid: uid,
+			posts: await Topics.addPostData(postData, uid),
+		});
+		return result.posts;
 	};
+
+	async function addEventStartEnd(postData, set, reverse, topicData) {
+		if (!postData.length) {
+			return;
+		}
+		postData.forEach((p, index) => {
+			if (p && p.index === 0 && reverse) {
+				p.eventStart = topicData.lastposttime;
+				p.eventEnd = Date.now();
+			} else if (p && postData[index + 1]) {
+				p.eventStart = reverse ? postData[index + 1].timestamp : p.timestamp;
+				p.eventEnd = reverse ? p.timestamp : postData[index + 1].timestamp;
+			}
+		});
+		const lastPost = postData[postData.length - 1];
+		if (lastPost) {
+			lastPost.eventStart = reverse ? topicData.timestamp : lastPost.timestamp;
+			lastPost.eventEnd = reverse ? lastPost.timestamp : Date.now();
+			if (lastPost.index) {
+				const nextPost = await db[reverse ? 'getSortedSetRevRangeWithScores' : 'getSortedSetRangeWithScores'](set, lastPost.index, lastPost.index);
+				if (reverse) {
+					lastPost.eventStart = nextPost.length ? nextPost[0].score : lastPost.eventStart;
+				} else {
+					lastPost.eventEnd = nextPost.length ? nextPost[0].score : lastPost.eventEnd;
+				}
+			}
+		}
+	}
 
 	Topics.addPostData = async function (postData, uid) {
 		if (!Array.isArray(postData) || !postData.length) {
@@ -44,17 +123,13 @@ module.exports = function (Topics) {
 		] = await Promise.all([
 			posts.hasBookmarked(pids, uid),
 			posts.getVoteStatusByPostIDs(pids, uid),
-			getPostUserData('uid', async function (uids) {
-				return await posts.getUserInfoForPosts(uids, uid);
-			}),
-			getPostUserData('editor', async function (uids) {
-				return await user.getUsersFields(uids, ['uid', 'username', 'userslug']);
-			}),
+			getPostUserData('uid', async uids => await posts.getUserInfoForPosts(uids, uid)),
+			getPostUserData('editor', async uids => await user.getUsersFields(uids, ['uid', 'username', 'userslug'])),
 			getPostReplies(pids, uid),
 			Topics.addParentPosts(postData),
 		]);
 
-		postData.forEach(function (postObj, i) {
+		postData.forEach((postObj, i) => {
 			if (postObj) {
 				postObj.user = postObj.uid ? userData[postObj.uid] : { ...userData[postObj.uid] };
 				postObj.editor = postObj.editor ? editors[postObj.editor] : null;
@@ -82,7 +157,7 @@ module.exports = function (Topics) {
 
 	Topics.modifyPostsByPrivilege = function (topicData, topicPrivileges) {
 		const loggedIn = parseInt(topicPrivileges.uid, 10) > 0;
-		topicData.posts.forEach(function (post) {
+		topicData.posts.forEach((post) => {
 			if (post) {
 				post.topicOwnerPost = parseInt(topicData.uid, 10) === parseInt(post.uid, 10);
 				post.display_edit_tools = topicPrivileges.isAdminOrMod || (post.selfPost && topicPrivileges['posts:edit']);
@@ -101,9 +176,7 @@ module.exports = function (Topics) {
 	};
 
 	Topics.addParentPosts = async function (postData) {
-		var parentPids = postData.map(function (postObj) {
-			return postObj && postObj.hasOwnProperty('toPid') ? parseInt(postObj.toPid, 10) : null;
-		}).filter(Boolean);
+		let parentPids = postData.map(postObj => (postObj && postObj.hasOwnProperty('toPid') ? parseInt(postObj.toPid, 10) : null)).filter(Boolean);
 
 		if (!parentPids.length) {
 			return;
@@ -113,22 +186,22 @@ module.exports = function (Topics) {
 		const parentUids = _.uniq(parentPosts.map(postObj => postObj && postObj.uid));
 		const userData = await user.getUsersFields(parentUids, ['username']);
 
-		var usersMap = {};
-		userData.forEach(function (user) {
+		const usersMap = {};
+		userData.forEach((user) => {
 			usersMap[user.uid] = user.username;
 		});
-		var parents = {};
-		parentPosts.forEach(function (post, i) {
+		const parents = {};
+		parentPosts.forEach((post, i) => {
 			parents[parentPids[i]] = { username: usersMap[post.uid] };
 		});
 
-		postData.forEach(function (post) {
+		postData.forEach((post) => {
 			post.parent = parents[post.toPid];
 		});
 	};
 
 	Topics.calculatePostIndices = function (posts, start) {
-		posts.forEach(function (post, index) {
+		posts.forEach((post, index) => {
 			if (post) {
 				post.index = start + index + 1;
 			}
@@ -146,11 +219,11 @@ module.exports = function (Topics) {
 	};
 
 	Topics.getLatestUndeletedReply = async function (tid) {
-		var isDeleted = false;
-		var index = 0;
+		let isDeleted = false;
+		let index = 0;
 		do {
 			/* eslint-disable no-await-in-loop */
-			const pids = await db.getSortedSetRevRange('tid:' + tid + ':posts', index, index);
+			const pids = await db.getSortedSetRevRange(`tid:${tid}:posts`, index, index);
 			if (!pids.length) {
 				return null;
 			}
@@ -171,33 +244,33 @@ module.exports = function (Topics) {
 			const downvotes = parseInt(postData.downvotes, 10) || 0;
 			const votes = upvotes - downvotes;
 			await db.sortedSetsAdd([
-				'tid:' + tid + ':posts', 'tid:' + tid + ':posts:votes',
+				`tid:${tid}:posts`, `tid:${tid}:posts:votes`,
 			], [postData.timestamp, votes], postData.pid);
 		}
 		await Topics.increasePostCount(tid);
-		await db.sortedSetIncrBy('tid:' + tid + ':posters', 1, postData.uid);
-		const posterCount = await db.sortedSetCard('tid:' + tid + ':posters');
+		await db.sortedSetIncrBy(`tid:${tid}:posters`, 1, postData.uid);
+		const posterCount = await db.sortedSetCard(`tid:${tid}:posters`);
 		await Topics.setTopicField(tid, 'postercount', posterCount);
 		await Topics.updateTeaser(tid);
 	};
 
 	Topics.removePostFromTopic = async function (tid, postData) {
 		await db.sortedSetsRemove([
-			'tid:' + tid + ':posts',
-			'tid:' + tid + ':posts:votes',
+			`tid:${tid}:posts`,
+			`tid:${tid}:posts:votes`,
 		], postData.pid);
 		await Topics.decreasePostCount(tid);
-		await db.sortedSetIncrBy('tid:' + tid + ':posters', -1, postData.uid);
-		await db.sortedSetsRemoveRangeByScore(['tid:' + tid + ':posters'], '-inf', 0);
-		const posterCount = await db.sortedSetCard('tid:' + tid + ':posters');
+		await db.sortedSetIncrBy(`tid:${tid}:posters`, -1, postData.uid);
+		await db.sortedSetsRemoveRangeByScore([`tid:${tid}:posters`], '-inf', 0);
+		const posterCount = await db.sortedSetCard(`tid:${tid}:posters`);
 		await Topics.setTopicField(tid, 'postercount', posterCount);
 		await Topics.updateTeaser(tid);
 	};
 
 	Topics.getPids = async function (tid) {
-		var [mainPid, pids] = await Promise.all([
+		let [mainPid, pids] = await Promise.all([
 			Topics.getTopicField(tid, 'mainPid'),
-			db.getSortedSetRange('tid:' + tid + ':posts', 0, -1),
+			db.getSortedSetRange(`tid:${tid}:posts`, 0, -1),
 		]);
 		if (parseInt(mainPid, 10)) {
 			pids = [mainPid].concat(pids);
@@ -214,12 +287,13 @@ module.exports = function (Topics) {
 	};
 
 	Topics.increaseViewCount = async function (tid) {
-		incrementFieldAndUpdateSortedSet(tid, 'viewcount', 1, 'topics:views');
+		const cid = await Topics.getTopicField(tid, 'cid');
+		incrementFieldAndUpdateSortedSet(tid, 'viewcount', 1, ['topics:views', `cid:${cid}:tids:views`]);
 	};
 
 	async function incrementFieldAndUpdateSortedSet(tid, field, by, set) {
-		const value = await db.incrObjectFieldBy('topic:' + tid, field, by);
-		await db.sortedSetAdd(set, value, tid);
+		const value = await db.incrObjectFieldBy(`topic:${tid}`, field, by);
+		await db[Array.isArray(set) ? 'sortedSetsAdd' : 'sortedSetAdd'](set, value, tid);
 	}
 
 	Topics.getTitleByPid = async function (pid) {
@@ -237,11 +311,11 @@ module.exports = function (Topics) {
 	};
 
 	Topics.getPostCount = async function (tid) {
-		return await db.getObjectField('topic:' + tid, 'postcount');
+		return await db.getObjectField(`topic:${tid}`, 'postcount');
 	};
 
 	async function getPostReplies(pids, callerUid) {
-		const keys = pids.map(pid => 'pid:' + pid + ':replies');
+		const keys = pids.map(pid => `pid:${pid}:replies`);
 		const arrayOfReplyPids = await db.getSortedSetsMembers(keys);
 
 		const uniquePids = _.uniq(_.flatten(arrayOfReplyPids));
@@ -262,20 +336,20 @@ module.exports = function (Topics) {
 		const uidMap = _.zipObject(uniqueUids, userData);
 		const pidMap = _.zipObject(replyData.map(r => r.pid), replyData);
 
-		const returnData = arrayOfReplyPids.map(function (replyPids) {
+		const returnData = arrayOfReplyPids.map((replyPids) => {
 			replyPids = replyPids.filter(pid => pidMap[pid]);
 			const uidsUsed = {};
 			const currentData = {
 				hasMore: false,
 				users: [],
-				text: replyPids.length > 1 ? '[[topic:replies_to_this_post, ' + replyPids.length + ']]' : '[[topic:one_reply_to_this_post]]',
+				text: replyPids.length > 1 ? `[[topic:replies_to_this_post, ${replyPids.length}]]` : '[[topic:one_reply_to_this_post]]',
 				count: replyPids.length,
 				timestampISO: replyPids.length ? utils.toISOString(pidMap[replyPids[0]].timestamp) : undefined,
 			};
 
 			replyPids.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
 
-			replyPids.forEach(function (replyPid) {
+			replyPids.forEach((replyPid) => {
 				const replyData = pidMap[replyPid];
 				if (!uidsUsed[replyData.uid] && currentData.users.length < 6) {
 					currentData.users.push(uidMap[replyData.uid]);
@@ -293,4 +367,40 @@ module.exports = function (Topics) {
 
 		return returnData;
 	}
+
+	Topics.syncBacklinks = async (postData) => {
+		if (!postData) {
+			throw new Error('[[error:invalid-data]]');
+		}
+
+		// Scan post content for topic links
+		const matches = [...postData.content.matchAll(backlinkRegex)];
+		if (!matches) {
+			return 0;
+		}
+
+		const { pid, uid, tid } = postData;
+		let add = _.uniq(matches.map(match => match[1]).map(tid => parseInt(tid, 10)));
+
+		const now = Date.now();
+		const topicsExist = await Topics.exists(add);
+		const current = (await db.getSortedSetMembers(`pid:${pid}:backlinks`)).map(tid => parseInt(tid, 10));
+		const remove = current.filter(tid => !add.includes(tid));
+		add = add.filter((_tid, idx) => topicsExist[idx] && !current.includes(_tid) && tid !== _tid);
+
+		// Remove old backlinks
+		await db.sortedSetRemove(`pid:${pid}:backlinks`, remove);
+
+		// Add new backlinks
+		await db.sortedSetAdd(`pid:${pid}:backlinks`, add.map(() => now), add);
+		await Promise.all(add.map(async (tid) => {
+			await Topics.events.log(tid, {
+				uid,
+				type: 'backlink',
+				href: `/post/${pid}`,
+			});
+		}));
+
+		return add.length + (current - remove);
+	};
 };

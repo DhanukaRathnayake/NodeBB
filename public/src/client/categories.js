@@ -1,8 +1,8 @@
 'use strict';
 
 
-define('forum/categories', ['components'], function (components) {
-	var	categories = {};
+define('forum/categories', ['components', 'categorySelector', 'hooks'], function (components, categorySelector, hooks) {
+	const categories = {};
 
 	$(window).on('action:ajaxify.start', function (ev, data) {
 		if (ajaxify.currentPage !== data.url) {
@@ -15,6 +15,12 @@ define('forum/categories', ['components'], function (components) {
 
 		socket.removeListener('event:new_post', categories.onNewPost);
 		socket.on('event:new_post', categories.onNewPost);
+		categorySelector.init($('[component="category-selector"]'), {
+			privilege: 'find',
+			onSelect: function (category) {
+				ajaxify.go('/category/' + category.cid);
+			},
+		});
 
 		$('.category-header').tooltip({
 			placement: 'bottom',
@@ -28,8 +34,8 @@ define('forum/categories', ['components'], function (components) {
 	};
 
 	function renderNewPost(cid, post) {
-		var category = components.get('categories/category', 'cid', cid);
-		var numRecentReplies = category.attr('data-numRecentReplies');
+		const category = components.get('categories/category', 'cid', cid);
+		const numRecentReplies = category.attr('data-numRecentReplies');
 		if (!numRecentReplies || !parseInt(numRecentReplies, 10)) {
 			return;
 		}
@@ -37,7 +43,7 @@ define('forum/categories', ['components'], function (components) {
 			return;
 		}
 
-		var recentPosts = category.find('[component="category/posts"]');
+		const recentPosts = category.find('[component="category/posts"]');
 
 		app.parseAndTranslate('partials/categories/lastpost', 'posts', { posts: [post] }, function (html) {
 			html.find('.post-content img:not(.not-responsive)').addClass('img-responsive');
@@ -50,14 +56,14 @@ define('forum/categories', ['components'], function (components) {
 
 			html.fadeIn();
 
-			app.createUserTooltips();
+			app.createUserTooltips(html);
 			html.find('.timeago').timeago();
 
 			if (category.find('[component="category/posts"]').length > parseInt(numRecentReplies, 10)) {
 				recentPosts.last().remove();
 			}
 
-			$(window).trigger('action:posts.loaded', { posts: [post] });
+			hooks.fire('action:posts.loaded', { posts: [post] });
 		});
 	}
 

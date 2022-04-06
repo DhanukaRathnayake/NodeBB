@@ -1,5 +1,10 @@
 {
-	"dashboard": "Tableau de bord",
+	"section-dashboard": "Tableau de bord",
+	"dashboard/overview": "Aperçu",
+	"dashboard/logins": "Connexions",
+	"dashboard/users": "Utilisateurs",
+	"dashboard/topics": "Sujets",
+	"dashboard/searches": "Recherches",
 	"section-general": "Général",
 
 	"section-manage": "Gestion",

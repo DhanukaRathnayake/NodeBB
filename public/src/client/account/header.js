@@ -9,9 +9,11 @@ define('forum/account/header', [
 	'benchpress',
 	'accounts/delete',
 	'api',
-], function (coverPhoto, pictureCropper, components, translator, Benchpress, AccountsDelete, api) {
-	var AccountHeader = {};
-	var isAdminOrSelfOrGlobalMod;
+	'bootbox',
+	'alerts',
+], function (coverPhoto, pictureCropper, components, translator, Benchpress, AccountsDelete, api, bootbox, alerts) {
+	const AccountHeader = {};
+	let isAdminOrSelfOrGlobalMod;
 
 	AccountHeader.init = function () {
 		isAdminOrSelfOrGlobalMod = ajaxify.data.isAdmin || ajaxify.data.isSelf || ajaxify.data.isGlobalModerator;
@@ -31,21 +33,19 @@ define('forum/account/header', [
 			toggleFollow('unfollow');
 		});
 
-		components.get('account/chat').on('click', function () {
-			socket.emit('modules.chats.hasPrivateChat', ajaxify.data.uid, function (err, roomId) {
-				if (err) {
-					return app.alertError(err.message);
-				}
-				if (roomId) {
-					app.openChat(roomId);
-				} else {
-					app.newChat(ajaxify.data.uid);
-				}
-			});
+		components.get('account/chat').on('click', async function () {
+			const roomId = await socket.emit('modules.chats.hasPrivateChat', ajaxify.data.uid);
+			const chat = await app.require('chat');
+			if (roomId) {
+				chat.openChat(roomId);
+			} else {
+				chat.newChat(ajaxify.data.uid);
+			}
 		});
 
-		components.get('account/new-chat').on('click', function () {
-			app.newChat(ajaxify.data.uid, function () {
+		components.get('account/new-chat').on('click', async function () {
+			const chat = await app.require('chat');
+			chat.newChat(ajaxify.data.uid, function () {
 				components.get('account/chat').parent().removeClass('hidden');
 			});
 		});
@@ -54,7 +54,9 @@ define('forum/account/header', [
 		components.get('account/ban').on('click', function () {
 			banAccount(ajaxify.data.theirid);
 		});
+		components.get('account/mute').on('click', muteAccount);
 		components.get('account/unban').on('click', unbanAccount);
+		components.get('account/unmute').on('click', unmuteAccount);
 		components.get('account/delete-account').on('click', handleDeleteEvent.bind(null, 'account'));
 		components.get('account/delete-content').on('click', handleDeleteEvent.bind(null, 'content'));
 		components.get('account/delete-all').on('click', handleDeleteEvent.bind(null, 'purge'));
@@ -77,7 +79,7 @@ define('forum/account/header', [
 
 	function selectActivePill() {
 		$('.account-sub-links li').removeClass('active').each(function () {
-			var href = $(this).find('a').attr('href');
+			const href = $(this).find('a').attr('href');
 
 			if (decodeURIComponent(href) === decodeURIComponent(window.location.pathname)) {
 				$(this).addClass('active');
@@ -116,13 +118,13 @@ define('forum/account/header', [
 	}
 
 	function toggleFollow(type) {
-		api[type === 'follow' ? 'put' : 'delete']('/users/' + ajaxify.data.uid + '/follow', undefined, function (err) {
+		api[type === 'follow' ? 'put' : 'del']('/users/' + ajaxify.data.uid + '/follow', undefined, function (err) {
 			if (err) {
-				return app.alertError(err);
+				return alerts.error(err);
 			}
 			components.get('account/follow').toggleClass('hide', type === 'follow');
 			components.get('account/unfollow').toggleClass('hide', type === 'unfollow');
-			app.alertSuccess('[[global:alert.' + type + ', ' + ajaxify.data.username + ']]');
+			alerts.success('[[global:alert.' + type + ', ' + ajaxify.data.username + ']]');
 		});
 
 		return false;
@@ -145,12 +147,14 @@ define('forum/account/header', [
 					submit: {
 						label: '[[user:ban_account]]',
 						callback: function () {
-							var formData = $('.ban-modal form').serializeArray().reduce(function (data, cur) {
+							const formData = $('.ban-modal form').serializeArray().reduce(function (data, cur) {
 								data[cur.name] = cur.value;
 								return data;
 							}, {});
 
-							var until = formData.length > 0 ? (Date.now() + (formData.length * 1000 * 60 * 60 * (parseInt(formData.unit, 10) ? 24 : 1))) : 0;
+							const until = formData.length > 0 ? (
+								Date.now() + (formData.length * 1000 * 60 * 60 * (parseInt(formData.unit, 10) ? 24 : 1))
+							) : 0;
 
 							api.put('/users/' + theirid + '/ban', {
 								until: until,
@@ -161,7 +165,7 @@ define('forum/account/header', [
 								}
 
 								ajaxify.refresh();
-							}).catch(app.alertError);
+							}).catch(alerts.error);
 						},
 					},
 				},
@@ -172,7 +176,50 @@ define('forum/account/header', [
 	function unbanAccount() {
 		api.del('/users/' + ajaxify.data.theirid + '/ban').then(() => {
 			ajaxify.refresh();
-		}).catch(app.alertError);
+		}).catch(alerts.error);
+	}
+
+	function muteAccount() {
+		Benchpress.render('admin/partials/temporary-mute', {}).then(function (html) {
+			bootbox.dialog({
+				className: 'mute-modal',
+				title: '[[user:mute_account]]',
+				message: html,
+				show: true,
+				buttons: {
+					close: {
+						label: '[[global:close]]',
+						className: 'btn-link',
+					},
+					submit: {
+						label: '[[user:mute_account]]',
+						callback: function () {
+							const formData = $('.mute-modal form').serializeArray().reduce(function (data, cur) {
+								data[cur.name] = cur.value;
+								return data;
+							}, {});
+
+							const until = formData.length > 0 ? (
+								Date.now() + (formData.length * 1000 * 60 * 60 * (parseInt(formData.unit, 10) ? 24 : 1))
+							) : 0;
+
+							api.put('/users/' + ajaxify.data.theirid + '/mute', {
+								until: until,
+								reason: formData.reason || '',
+							}).then(() => {
+								ajaxify.refresh();
+							}).catch(alerts.error);
+						},
+					},
+				},
+			});
+		});
+	}
+
+	function unmuteAccount() {
+		api.del('/users/' + ajaxify.data.theirid + '/mute').then(() => {
+			ajaxify.refresh();
+		}).catch(alerts.error);
 	}
 
 	function flagAccount() {
@@ -185,13 +232,13 @@ define('forum/account/header', [
 	}
 
 	function toggleBlockAccount() {
-		var targetEl = this;
+		const targetEl = this;
 		socket.emit('user.toggleBlock', {
 			blockeeUid: ajaxify.data.uid,
 			blockerUid: app.user.uid,
 		}, function (err, blocked) {
 			if (err) {
-				return app.alertError(err.message);
+				return alerts.error(err);
 			}
 
 			translator.translate('[[user:' + (blocked ? 'unblock' : 'block') + '_user]]', function (label) {
@@ -216,7 +263,7 @@ define('forum/account/header', [
 					if (!err) {
 						ajaxify.refresh();
 					} else {
-						app.alertError(err.message);
+						alerts.error(err);
 					}
 				});
 			});

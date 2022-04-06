@@ -15,7 +15,6 @@ const SocketAdmin = module.exports;
 SocketAdmin.user = require('./admin/user');
 SocketAdmin.categories = require('./admin/categories');
 SocketAdmin.settings = require('./admin/settings');
-SocketAdmin.groups = require('./admin/groups');
 SocketAdmin.tags = require('./admin/tags');
 SocketAdmin.rewards = require('./admin/rewards');
 SocketAdmin.navigation = require('./admin/navigation');
@@ -30,7 +29,6 @@ SocketAdmin.email = require('./admin/email');
 SocketAdmin.analytics = require('./admin/analytics');
 SocketAdmin.logs = require('./admin/logs');
 SocketAdmin.errors = require('./admin/errors');
-SocketAdmin.uploads = require('./admin/uploads');
 SocketAdmin.digest = require('./admin/digest');
 SocketAdmin.cache = require('./admin/cache');
 
@@ -42,28 +40,29 @@ SocketAdmin.before = async function (socket, method) {
 
 	// Check admin privileges mapping (if not in mapping, deny access)
 	const privilegeSet = privileges.admin.socketMap.hasOwnProperty(method) ? privileges.admin.socketMap[method].split(';') : [];
-	const hasPrivilege = (await Promise.all(privilegeSet.map(async privilege => privileges.admin.can(privilege, socket.uid)))).some(Boolean);
+	const hasPrivilege = (await Promise.all(privilegeSet.map(
+		async privilege => privileges.admin.can(privilege, socket.uid)
+	))).some(Boolean);
 	if (privilegeSet.length && hasPrivilege) {
 		return;
 	}
 
-	winston.warn('[socket.io] Call to admin method ( ' + method + ' ) blocked (accessed by uid ' + socket.uid + ')');
+	winston.warn(`[socket.io] Call to admin method ( ${method} ) blocked (accessed by uid ${socket.uid})`);
 	throw new Error('[[error:no-privileges]]');
 };
 
-SocketAdmin.restart = function (socket, data, callback) {
-	logRestart(socket);
+SocketAdmin.restart = async function (socket) {
+	await logRestart(socket);
 	meta.restart();
-	callback();
 };
 
-function logRestart(socket) {
-	events.log({
+async function logRestart(socket) {
+	await events.log({
 		type: 'restart',
 		uid: socket.uid,
 		ip: socket.ip,
 	});
-	db.setObject('lastrestart', {
+	await db.setObject('lastrestart', {
 		uid: socket.uid,
 		ip: socket.ip,
 		timestamp: Date.now(),
@@ -78,7 +77,7 @@ SocketAdmin.reload = async function (socket) {
 		ip: socket.ip,
 	});
 
-	logRestart(socket);
+	await logRestart(socket);
 	meta.restart();
 };
 
@@ -106,7 +105,7 @@ SocketAdmin.deleteAllSessions = function (socket, data, callback) {
 };
 
 SocketAdmin.reloadAllSessions = function (socket, data, callback) {
-	websockets.in('uid_' + socket.uid).emit('event:livereload');
+	websockets.in(`uid_${socket.uid}`).emit('event:livereload');
 	callback();
 };
 

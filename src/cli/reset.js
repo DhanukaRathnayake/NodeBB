@@ -1,9 +1,9 @@
 'use strict';
 
-require('colors');
 const path = require('path');
 const winston = require('winston');
 const fs = require('fs');
+const chalk = require('chalk');
 
 const db = require('../database');
 const events = require('../events');
@@ -22,9 +22,10 @@ exports.reset = async function (options) {
 			} else {
 				if (!themeNamePattern.test(themeId)) {
 					// Allow omission of `nodebb-theme-`
-					themeId = 'nodebb-theme-' + themeId;
+					themeId = `nodebb-theme-${themeId}`;
 				}
 
+				themeId = await plugins.autocomplete(themeId);
 				await resetTheme(themeId);
 			}
 		},
@@ -35,9 +36,10 @@ exports.reset = async function (options) {
 			} else {
 				if (!pluginNamePattern.test(pluginId)) {
 					// Allow omission of `nodebb-plugin-`
-					pluginId = 'nodebb-plugin-' + pluginId;
+					pluginId = `nodebb-plugin-${pluginId}`;
 				}
 
+				pluginId = await plugins.autocomplete(pluginId);
 				await resetPlugin(pluginId);
 			}
 		},
@@ -55,8 +57,8 @@ exports.reset = async function (options) {
 
 	if (!tasks.length) {
 		console.log([
-			'No arguments passed in, so nothing was reset.\n'.yellow,
-			'Use ./nodebb reset ' + '{-t|-p|-w|-s|-a}'.red,
+			chalk.yellow('No arguments passed in, so nothing was reset.\n'),
+			`Use ./nodebb reset ${chalk.red('{-t|-p|-w|-s|-a}')}`,
 			'    -t\tthemes',
 			'    -p\tplugins',
 			'    -w\twidgets',
@@ -80,7 +82,7 @@ exports.reset = async function (options) {
 		winston.info('[reset] Reset complete. Please run `./nodebb build` to rebuild assets.');
 		process.exit(0);
 	} catch (err) {
-		winston.error('[reset] Errors were encountered during reset -- ' + err.message);
+		winston.error(`[reset] Errors were encountered during reset -- ${err.message}`);
 		process.exit(1);
 	}
 };
@@ -111,7 +113,7 @@ async function resetThemeTo(themeId) {
 		id: themeId,
 	});
 	await meta.configs.set('bootswatchSkin', '');
-	winston.info('[reset] Theme reset to ' + themeId + ' and default skin');
+	winston.info(`[reset] Theme reset to ${themeId} and default skin`);
 }
 
 async function resetPlugin(pluginId) {
@@ -119,21 +121,17 @@ async function resetPlugin(pluginId) {
 		const isActive = await db.isSortedSetMember('plugins:active', pluginId);
 		if (isActive) {
 			await db.sortedSetRemove('plugins:active', pluginId);
-		}
-
-		await events.log({
-			type: 'plugin-deactivate',
-			text: pluginId,
-		});
-
-		if (isActive) {
+			await events.log({
+				type: 'plugin-deactivate',
+				text: pluginId,
+			});
 			winston.info('[reset] Plugin `%s` disabled', pluginId);
 		} else {
 			winston.warn('[reset] Plugin `%s` was not active on this forum', pluginId);
 			winston.info('[reset] No action taken.');
 		}
 	} catch (err) {
-		winston.error('[reset] Could not disable plugin: ' + pluginId + ' encountered error %s\n' + err.stack);
+		winston.error(`[reset] Could not disable plugin: ${pluginId} encountered error %s\n${err.stack}`);
 		throw err;
 	}
 }

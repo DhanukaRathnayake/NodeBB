@@ -25,6 +25,8 @@ get:
                 type: string
               showSiteTitle:
                 type: boolean
+              maintenanceMode:
+                type: boolean
               minimumTitleLength:
                 type: number
               maximumTitleLength:
@@ -38,6 +40,8 @@ get:
               maximumTagsPerTopic:
                 type: number
               minimumTagLength:
+                type: number
+              undoTimeout:
                 type: number
               maximumTagLength:
                 type: number
@@ -88,8 +92,6 @@ get:
                 description: A user identifier
               cache-buster:
                 type: string
-              requireEmailConfirmation:
-                type: boolean
               topicPostSort:
                 type: string
               categoryTopicSort:
@@ -138,3 +140,9 @@ get:
                 type: boolean
               enableQuickReply:
                 type: boolean
+              iconBackgrounds:
+                type: array
+                items:
+                  type: string
+                  description: A valid CSS colour code
+                  example: '#fff'

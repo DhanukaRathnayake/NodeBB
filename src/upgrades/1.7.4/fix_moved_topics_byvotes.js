@@ -1,53 +1,31 @@
 'use strict';
 
-var async = require('async');
-var batch = require('../../batch');
-var db = require('../../database');
+const batch = require('../../batch');
+const db = require('../../database');
 
 module.exports = {
 	name: 'Fix sort by votes for moved topics',
 	timestamp: Date.UTC(2018, 0, 8),
-	method: function (callback) {
-		var progress = this.progress;
+	method: async function () {
+		const { progress } = this;
 
-		batch.processSortedSet('topics:tid', function (tids, next) {
-			async.eachLimit(tids, 500, function (tid, _next) {
+		await batch.processSortedSet('topics:tid', async (tids) => {
+			await Promise.all(tids.map(async (tid) => {
 				progress.incr();
-				var topicData;
-				async.waterfall([
-					function (next) {
-						db.getObjectFields('topic:' + tid, ['cid', 'oldCid', 'upvotes', 'downvotes', 'pinned'], next);
-					},
-					function (_topicData, next) {
-						topicData = _topicData;
-						if (!topicData.cid || !topicData.oldCid) {
-							return _next();
-						}
-
-						var upvotes = parseInt(topicData.upvotes, 10) || 0;
-						var downvotes = parseInt(topicData.downvotes, 10) || 0;
-						var votes = upvotes - downvotes;
-
-						async.series([
-							function (next) {
-								db.sortedSetRemove('cid:' + topicData.oldCid + ':tids:votes', tid, next);
-							},
-							function (next) {
-								if (parseInt(topicData.pinned, 10) !== 1) {
-									db.sortedSetAdd('cid:' + topicData.cid + ':tids:votes', votes, tid, next);
-								} else {
-									next();
-								}
-							},
-						], function (err) {
-							next(err);
-						});
-					},
-				], _next);
-			}, next);
+				const topicData = await db.getObjectFields(`topic:${tid}`, ['cid', 'oldCid', 'upvotes', 'downvotes', 'pinned']);
+				if (topicData.cid && topicData.oldCid) {
+					const upvotes = parseInt(topicData.upvotes, 10) || 0;
+					const downvotes = parseInt(topicData.downvotes, 10) || 0;
+					const votes = upvotes - downvotes;
+					await db.sortedSetRemove(`cid:${topicData.oldCid}:tids:votes`, tid);
+					if (parseInt(topicData.pinned, 10) !== 1) {
+						await db.sortedSetAdd(`cid:${topicData.cid}:tids:votes`, votes, tid);
+					}
+				}
+			}));
 		}, {
 			progress: progress,
 			batch: 500,
-		}, callback);
+		});
 	},
 };

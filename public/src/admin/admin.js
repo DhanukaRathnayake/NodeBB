@@ -1,7 +1,8 @@
 'use strict';
 
 (function () {
-	var logoutTimer = 0;
+	let logoutTimer = 0;
+	let logoutMessage;
 	function startLogoutTimer() {
 		if (app.config.adminReloginDuration <= 0) {
 			return;
@@ -10,29 +11,32 @@
 			clearTimeout(logoutTimer);
 		}
 		// pre-translate language string gh#9046
-		var translated;
-		if (!translated) {
+		if (!logoutMessage) {
 			require(['translator'], function (translator) {
-				translator.translate('[[login:logged-out-due-to-inactivity]]', function (_translated) {
-					translated = _translated;
+				translator.translate('[[login:logged-out-due-to-inactivity]]', function (translated) {
+					logoutMessage = translated;
 				});
 			});
 		}
 
 		logoutTimer = setTimeout(function () {
-			bootbox.alert({
-				closeButton: false,
-				message: translated,
-				callback: function () {
-					window.location.reload();
-				},
+			require(['bootbox'], function (bootbox) {
+				bootbox.alert({
+					closeButton: false,
+					message: logoutMessage,
+					callback: function () {
+						window.location.reload();
+					},
+				});
 			});
 		}, 3600000);
 	}
 
-	$(window).on('action:ajaxify.end', function () {
-		showCorrectNavTab();
-		startLogoutTimer();
+	require(['hooks'], (hooks) => {
+		hooks.on('action:ajaxify.end', () => {
+			showCorrectNavTab();
+			startLogoutTimer();
+		});
 	});
 
 	function showCorrectNavTab() {
@@ -50,7 +54,9 @@
 		}
 
 		$('[component="logout"]').on('click', function () {
-			app.logout();
+			require(['logout'], function (logout) {
+				logout();
+			});
 			return false;
 		});
 
@@ -66,12 +72,12 @@
 	});
 
 	function setupNProgress() {
-		require(['nprogress'], function (NProgress) {
+		require(['nprogress', 'hooks'], function (NProgress, hooks) {
 			$(window).on('action:ajaxify.start', function () {
 				NProgress.set(0.7);
 			});
 
-			$(window).on('action:ajaxify.end', function () {
+			hooks.on('action:ajaxify.end', function () {
 				NProgress.done();
 			});
 		});
@@ -90,11 +96,11 @@
 			}
 
 			url = [config.relative_path, url].join('/');
-			var fallback;
+			let fallback;
 
 			$('#main-menu li').removeClass('active');
 			$('#main-menu a').removeClass('active').filter('[href="' + url + '"]').each(function () {
-				var menu = $(this);
+				const menu = $(this);
 				if (menu.parent().attr('data-link')) {
 					return;
 				}
@@ -105,16 +111,13 @@
 				fallback = menu.text();
 			});
 
-			var mainTitle;
-			var pageTitle;
-			if (/admin\/general\/dashboard$/.test(url)) {
-				pageTitle = '[[admin/menu:general/dashboard]]';
-				mainTitle = pageTitle;
-			} else if (/admin\/plugins\//.test(url)) {
+			let mainTitle;
+			let pageTitle;
+			if (/admin\/plugins\//.test(url)) {
 				mainTitle = fallback;
 				pageTitle = '[[admin/menu:section-plugins]] > ' + mainTitle;
 			} else {
-				var matches = url.match(/admin\/(.+?)\/(.+?)$/);
+				const matches = url.match(/admin\/(.+?)\/(.+?)$/);
 				if (matches) {
 					mainTitle = '[[admin/menu:' + matches[1] + '/' + matches[2] + ']]';
 					pageTitle = '[[admin/menu:section-' +
@@ -124,8 +127,8 @@
 						mainTitle = translator.compile('admin/menu:settings.page-title', mainTitle);
 					}
 				} else {
-					mainTitle = '[[admin/menu:dashboard]]';
-					pageTitle = '[[admin/menu:dashboard]]';
+					mainTitle = '[[admin/menu:section-dashboard]]';
+					pageTitle = '[[admin/menu:section-dashboard]]';
 				}
 			}
 
@@ -142,31 +145,35 @@
 
 	function setupRestartLinks() {
 		$('.rebuild-and-restart').off('click').on('click', function () {
-			bootbox.confirm('[[admin/admin:alert.confirm-rebuild-and-restart]]', function (confirm) {
-				if (confirm) {
-					require(['admin/modules/instance'], function (instance) {
-						instance.rebuildAndRestart();
-					});
-				}
+			require(['bootbox'], function (bootbox) {
+				bootbox.confirm('[[admin/admin:alert.confirm-rebuild-and-restart]]', function (confirm) {
+					if (confirm) {
+						require(['admin/modules/instance'], function (instance) {
+							instance.rebuildAndRestart();
+						});
+					}
+				});
 			});
 		});
 
 		$('.restart').off('click').on('click', function () {
-			bootbox.confirm('[[admin/admin:alert.confirm-restart]]', function (confirm) {
-				if (confirm) {
-					require(['admin/modules/instance'], function (instance) {
-						instance.restart();
-					});
-				}
+			require(['bootbox'], function (bootbox) {
+				bootbox.confirm('[[admin/admin:alert.confirm-restart]]', function (confirm) {
+					if (confirm) {
+						require(['admin/modules/instance'], function (instance) {
+							instance.restart();
+						});
+					}
+				});
 			});
 		});
 	}
 
 	function configureSlidemenu() {
 		require(['slideout'], function (Slideout) {
-			var env = utils.findBootstrapEnvironment();
+			let env = utils.findBootstrapEnvironment();
 
-			var slideout = new Slideout({
+			const slideout = new Slideout({
 				panel: document.getElementById('panel'),
 				menu: document.getElementById('menu'),
 				padding: 256,

@@ -10,40 +10,27 @@ require('../../require-main');
 const packageInstall = require('./package-install');
 const { paths } = require('../constants');
 
-// check to make sure dependencies are installed
 try {
-	fs.accessSync(paths.currentPackage, fs.constants.R_OK);
-} catch (e) {
-	if (e.code === 'ENOENT') {
-		console.warn('package.json not found.');
-		console.log('Populating package.json...');
-
-		packageInstall.updatePackageFile();
-		packageInstall.preserveExtraneousPlugins();
-
-		try {
-			fs.accessSync(path.join(paths.nodeModules, 'colors/package.json'), fs.constants.R_OK);
-
-			require('colors');
-			console.log('OK'.green);
-		} catch (e) {
-			console.log('OK');
+	fs.accessSync(paths.currentPackage, fs.constants.R_OK); // throw on missing package.json
+	try { // handle missing node_modules/ directory
+		fs.accessSync(paths.nodeModules, fs.constants.R_OK);
+	} catch (e) {
+		if (e.code === 'ENOENT') {
+			// run package installation just to sync up node_modules/ with existing package.json
+			packageInstall.installAll();
+		} else {
+			throw e;
 		}
-	} else {
-		throw e;
 	}
-}
-
-try {
 	fs.accessSync(path.join(paths.nodeModules, 'semver/package.json'), fs.constants.R_OK);
 
 	const semver = require('semver');
 	const defaultPackage = require('../../install/package.json');
 
 	const checkVersion = function (packageName) {
-		const version = JSON.parse(fs.readFileSync(path.join(paths.nodeModules, packageName, 'package.json'), 'utf8')).version;
+		const { version } = JSON.parse(fs.readFileSync(path.join(paths.nodeModules, packageName, 'package.json'), 'utf8'));
 		if (!semver.satisfies(version, defaultPackage.dependencies[packageName])) {
-			const e = new TypeError('Incorrect dependency version: ' + packageName);
+			const e = new TypeError(`Incorrect dependency version: ${packageName}`);
 			e.code = 'DEP_WRONG_VERSION';
 			throw e;
 		}
@@ -52,23 +39,25 @@ try {
 	checkVersion('nconf');
 	checkVersion('async');
 	checkVersion('commander');
-	checkVersion('colors');
+	checkVersion('chalk');
+	checkVersion('lodash');
 } catch (e) {
 	if (['ENOENT', 'DEP_WRONG_VERSION', 'MODULE_NOT_FOUND'].includes(e.code)) {
 		console.warn('Dependencies outdated or not yet installed.');
 		console.log('Installing them now...\n');
 
 		packageInstall.updatePackageFile();
+		packageInstall.preserveExtraneousPlugins();
 		packageInstall.installAll();
 
-		require('colors');
-		console.log('OK'.green + '\n'.reset);
+		const chalk = require('chalk');
+		console.log(`${chalk.green('OK')}\n`);
 	} else {
 		throw e;
 	}
 }
 
-require('colors');
+const chalk = require('chalk');
 const nconf = require('nconf');
 const { program } = require('commander');
 const yargs = require('yargs');
@@ -76,6 +65,8 @@ const yargs = require('yargs');
 const pkg = require('../../package.json');
 const file = require('../file');
 const prestart = require('../prestart');
+
+program.configureHelp(require('./colors'));
 
 program
 	.name('./nodebb')
@@ -95,14 +86,10 @@ nconf.argv(opts).env({
 	separator: '__',
 });
 
-const env = program.dev ? 'development' : (process.env.NODE_ENV || 'production');
-process.env.NODE_ENV = env;
-global.env = env;
-
 prestart.setupWinston();
 
 // Alternate configuration file support
-const	configFile = path.resolve(paths.baseDir, nconf.get('config') || 'config.json');
+const configFile = path.resolve(paths.baseDir, nconf.get('config') || 'config.json');
 const configExists = file.existsSync(configFile) || (nconf.get('url') && nconf.get('secret') && nconf.get('database'));
 
 prestart.loadConfig(configFile);
@@ -119,52 +106,50 @@ process.env.CONFIG = configFile;
 program
 	.command('start')
 	.description('Start the NodeBB server')
-	.action(function () {
-		require('./running').start(program);
+	.action(() => {
+		require('./running').start(program.opts());
 	});
 program
 	.command('slog', null, {
 		noHelp: true,
 	})
 	.description('Start the NodeBB server and view the live output log')
-	.action(function () {
-		program.log = true;
-		require('./running').start(program);
+	.action(() => {
+		require('./running').start({ ...program.opts(), log: true });
 	});
 program
 	.command('dev', null, {
 		noHelp: true,
 	})
 	.description('Start NodeBB in verbose development mode')
-	.action(function () {
-		program.dev = true;
+	.action(() => {
 		process.env.NODE_ENV = 'development';
 		global.env = 'development';
-		require('./running').start(program);
+		require('./running').start({ ...program.opts(), dev: true });
 	});
 program
 	.command('stop')
 	.description('Stop the NodeBB server')
-	.action(function () {
-		require('./running').stop(program);
+	.action(() => {
+		require('./running').stop(program.opts());
 	});
 program
 	.command('restart')
 	.description('Restart the NodeBB server')
-	.action(function () {
-		require('./running').restart(program);
+	.action(() => {
+		require('./running').restart(program.opts());
 	});
 program
 	.command('status')
 	.description('Check the running status of the NodeBB server')
-	.action(function () {
-		require('./running').status(program);
+	.action(() => {
+		require('./running').status(program.opts());
 	});
 program
 	.command('log')
 	.description('Open the output log (useful for debugging)')
-	.action(function () {
-		require('./running').log(program);
+	.action(() => {
+		require('./running').log(program.opts());
 	});
 
 // management commands
@@ -172,12 +157,12 @@ program
 	.command('setup [config]')
 	.description('Run the NodeBB setup script, or setup with an initial config')
 	.option('--skip-build', 'Run setup without building assets')
-	.action(function (initConfig) {
+	.action((initConfig) => {
 		if (initConfig) {
 			try {
 				initConfig = JSON.parse(initConfig);
 			} catch (e) {
-				console.warn('Invalid JSON passed as initial config value.'.red);
+				console.warn(chalk.red('Invalid JSON passed as initial config value.'));
 				console.log('If you meant to pass in an initial config value, please try again.\n');
 
 				throw e;
@@ -189,41 +174,45 @@ program
 program
 	.command('install')
 	.description('Launch the NodeBB web installer for configuration setup')
-	.action(function () {
+	.action(() => {
 		require('./setup').webInstall();
 	});
 program
 	.command('build [targets...]')
-	.description('Compile static assets ' + '(JS, CSS, templates, languages)'.red)
+	.description(`Compile static assets ${chalk.red('(JS, CSS, templates, languages)')}`)
 	.option('-s, --series', 'Run builds in series without extra processes')
-	.action(function (targets, options) {
+	.action((targets, options) => {
+		if (program.opts().dev) {
+			process.env.NODE_ENV = 'development';
+			global.env = 'development';
+		}
 		require('./manage').build(targets.length ? targets : true, options);
 	})
-	.on('--help', function () {
+	.on('--help', () => {
 		require('../meta/aliases').buildTargets();
 	});
 program
 	.command('activate [plugin]')
 	.description('Activate a plugin for the next startup of NodeBB (nodebb-plugin- prefix is optional)')
-	.action(function (plugin) {
+	.action((plugin) => {
 		require('./manage').activate(plugin);
 	});
 program
 	.command('plugins')
-	.action(function () {
+	.action(() => {
 		require('./manage').listPlugins();
 	})
 	.description('List all installed plugins');
 program
 	.command('events [count]')
 	.description('Outputs the most recent administrative events recorded by NodeBB')
-	.action(function (count) {
+	.action((count) => {
 		require('./manage').listEvents(count);
 	});
 program
 	.command('info')
 	.description('Outputs various system info')
-	.action(function () {
+	.action(() => {
 		require('./manage').info();
 	});
 
@@ -237,16 +226,14 @@ resetCommand
 	.option('-w, --widgets', 'Disable all widgets')
 	.option('-s, --settings', 'Reset settings to their default values')
 	.option('-a, --all', 'All of the above')
-	.action(function (options) {
-		const valid = ['theme', 'plugin', 'widgets', 'settings', 'all'].some(function (x) {
-			return options[x];
-		});
+	.action((options) => {
+		const valid = ['theme', 'plugin', 'widgets', 'settings', 'all'].some(x => options[x]);
 		if (!valid) {
-			console.warn('\n  No valid options passed in, so nothing was reset.'.red);
+			console.warn(`\n${chalk.red('No valid options passed in, so nothing was reset.')}`);
 			resetCommand.help();
 		}
 
-		require('./reset').reset(options, function (err) {
+		require('./reset').reset(options, (err) => {
 			if (err) {
 				return process.exit(1);
 			}
@@ -254,6 +241,10 @@ resetCommand
 			process.exit(0);
 		});
 	});
+
+// user
+program
+	.addCommand(require('./user')());
 
 // upgrades
 program
@@ -264,15 +255,16 @@ program
 	.option('-p, --plugins', 'Check installed plugins for updates', false)
 	.option('-s, --schema', 'Update NodeBB data store schema', false)
 	.option('-b, --build', 'Rebuild assets', false)
-	.on('--help', function () {
-		console.log('\n' + [
+	.on('--help', () => {
+		console.log(`\n${[
 			'When running particular upgrade scripts, options are ignored.',
 			'By default all options are enabled. Passing any options disables that default.',
-			'Only package and dependency updates: ' + './nodebb upgrade -mi'.yellow,
-			'Only database update: ' + './nodebb upgrade -s'.yellow,
-		].join('\n'));
+			'\nExamples:',
+			`  Only package and dependency updates: ${chalk.yellow('./nodebb upgrade -mi')}`,
+			`  Only database update: ${chalk.yellow('./nodebb upgrade -s')}`,
+		].join('\n')}`);
 	})
-	.action(function (scripts, options) {
+	.action((scripts, options) => {
 		require('./upgrade').upgrade(scripts.length ? scripts : true, options);
 	});
 
@@ -282,12 +274,12 @@ program
 	})
 	.alias('upgradePlugins')
 	.description('Upgrade plugins')
-	.action(function () {
-		require('./upgrade-plugins').upgradePlugins(function (err) {
+	.action(() => {
+		require('./upgrade-plugins').upgradePlugins((err) => {
 			if (err) {
 				throw err;
 			}
-			console.log('OK'.green);
+			console.log(chalk.green('OK'));
 			process.exit();
 		});
 	});
@@ -295,12 +287,12 @@ program
 program
 	.command('help [command]')
 	.description('Display help for [command]')
-	.action(function (name) {
+	.action((name) => {
 		if (!name) {
 			return program.help();
 		}
 
-		const command = program.commands.find(function (command) { return command._name === name; });
+		const command = program.commands.find(command => command._name === name);
 		if (command) {
 			command.help();
 		} else {
@@ -308,8 +300,6 @@ program
 			program.help();
 		}
 	});
-
-require('./colors');
 
 if (process.argv.length === 2) {
 	program.help();

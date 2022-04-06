@@ -2,7 +2,7 @@
 
 const winston = require('winston');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
 const nconf = require('nconf');
 const os = require('os');
 const cproc = require('child_process');
@@ -13,9 +13,9 @@ const db = require('../database');
 const meta = require('../meta');
 const pubsub = require('../pubsub');
 const { paths } = require('../constants');
+const pkgInstall = require('../cli/package-install');
 
-const supportedPackageManagerList = require('../cli/package-install').supportedPackageManager; // load config from src/cli/package-install.js
-const packageManager = supportedPackageManagerList.indexOf(nconf.get('package_manager')) >= 0 ? nconf.get('package_manager') : 'npm';
+const packageManager = pkgInstall.getPackageManager();
 let packageManagerExecutable = packageManager;
 const packageManagerCommands = {
 	yarn: {
@@ -42,13 +42,13 @@ if (process.platform === 'win32') {
 
 module.exports = function (Plugins) {
 	if (nconf.get('isPrimary')) {
-		pubsub.on('plugins:toggleInstall', function (data) {
+		pubsub.on('plugins:toggleInstall', (data) => {
 			if (data.hostname !== os.hostname()) {
 				toggleInstall(data.id, data.version);
 			}
 		});
 
-		pubsub.on('plugins:upgrade', function (data) {
+		pubsub.on('plugins:upgrade', (data) => {
 			if (data.hostname !== os.hostname()) {
 				upgrade(data.id, data.version);
 			}
@@ -64,7 +64,8 @@ module.exports = function (Plugins) {
 			await db.sortedSetAdd('plugins:active', count, id);
 		}
 		meta.reloadRequired = true;
-		Plugins.hooks.fire(isActive ? 'action:plugin.deactivate' : 'action:plugin.activate', { id: id });
+		const hook = isActive ? 'deactivate' : 'activate';
+		Plugins.hooks.fire(`action:plugin.${hook}`, { id: id });
 		return { id: id, active: !isActive };
 	};
 
@@ -100,21 +101,21 @@ module.exports = function (Plugins) {
 		}
 		await runPackageManagerCommandAsync(type, id, version || 'latest');
 		const pluginData = await Plugins.get(id);
-		Plugins.hooks.fire('action:plugin.' + type, { id: id, version: version });
+		Plugins.hooks.fire(`action:plugin.${type}`, { id: id, version: version });
 		return pluginData;
 	}
 
 	function runPackageManagerCommand(command, pkgName, version, callback) {
 		cproc.execFile(packageManagerExecutable, [
 			packageManagerCommands[packageManager][command],
-			pkgName + (command === 'install' ? '@' + version : ''),
+			pkgName + (command === 'install' ? `@${version}` : ''),
 			'--save',
-		], function (err, stdout) {
+		], (err, stdout) => {
 			if (err) {
 				return callback(err);
 			}
 
-			winston.verbose('[plugins/' + command + '] ' + stdout);
+			winston.verbose(`[plugins/${command}] ${stdout}`);
 			callback();
 		});
 	}
@@ -135,7 +136,7 @@ module.exports = function (Plugins) {
 	Plugins.isInstalled = async function (id) {
 		const pluginDir = path.join(paths.nodeModules, id);
 		try {
-			const stats = await fs.promises.stat(pluginDir);
+			const stats = await fs.stat(pluginDir);
 			return stats.isDirectory();
 		} catch (err) {
 			return false;
@@ -148,5 +149,13 @@ module.exports = function (Plugins) {
 
 	Plugins.getActive = async function () {
 		return await db.getSortedSetRange('plugins:active', 0, -1);
+	};
+
+	Plugins.autocomplete = async (fragment) => {
+		const pluginDir = paths.nodeModules;
+		const plugins = (await fs.readdir(pluginDir)).filter(filename => filename.startsWith(fragment));
+
+		// Autocomplete only if single match
+		return plugins.length === 1 ? plugins.pop() : fragment;
 	};
 };

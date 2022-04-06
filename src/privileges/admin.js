@@ -9,213 +9,195 @@ const helpers = require('./helpers');
 const plugins = require('../plugins');
 const utils = require('../utils');
 
-module.exports = function (privileges) {
-	privileges.admin = {};
+const privsAdmin = module.exports;
 
-	privileges.admin.privilegeLabels = [
-		{ name: '[[admin/manage/privileges:admin-dashboard]]' },
-		{ name: '[[admin/manage/privileges:admin-categories]]' },
-		{ name: '[[admin/manage/privileges:admin-privileges]]' },
-		{ name: '[[admin/manage/privileges:admin-admins-mods]]' },
-		{ name: '[[admin/manage/privileges:admin-users]]' },
-		{ name: '[[admin/manage/privileges:admin-groups]]' },
-		{ name: '[[admin/manage/privileges:admin-tags]]' },
-		{ name: '[[admin/manage/privileges:admin-settings]]' },
-	];
+privsAdmin.privilegeLabels = [
+	{ name: '[[admin/manage/privileges:admin-dashboard]]' },
+	{ name: '[[admin/manage/privileges:admin-categories]]' },
+	{ name: '[[admin/manage/privileges:admin-privileges]]' },
+	{ name: '[[admin/manage/privileges:admin-admins-mods]]' },
+	{ name: '[[admin/manage/privileges:admin-users]]' },
+	{ name: '[[admin/manage/privileges:admin-groups]]' },
+	{ name: '[[admin/manage/privileges:admin-tags]]' },
+	{ name: '[[admin/manage/privileges:admin-settings]]' },
+];
 
-	privileges.admin.userPrivilegeList = [
-		'admin:dashboard',
-		'admin:categories',
-		'admin:privileges',
-		'admin:admins-mods',
-		'admin:users',
-		'admin:groups',
-		'admin:tags',
-		'admin:settings',
-	];
+privsAdmin.userPrivilegeList = [
+	'admin:dashboard',
+	'admin:categories',
+	'admin:privileges',
+	'admin:admins-mods',
+	'admin:users',
+	'admin:groups',
+	'admin:tags',
+	'admin:settings',
+];
 
-	privileges.admin.groupPrivilegeList = privileges.admin.userPrivilegeList.map(privilege => 'groups:' + privilege);
+privsAdmin.groupPrivilegeList = privsAdmin.userPrivilegeList.map(privilege => `groups:${privilege}`);
 
-	// Mapping for a page route (via direct match or regexp) to a privilege
-	privileges.admin.routeMap = {
-		dashboard: 'admin:dashboard',
-		'manage/categories': 'admin:categories',
-		'manage/privileges': 'admin:privileges',
-		'manage/admins-mods': 'admin:admins-mods',
-		'manage/users': 'admin:users',
-		'manage/groups': 'admin:groups',
-		'manage/tags': 'admin:tags',
-		'settings/tags': 'admin:tags',
-		'extend/plugins': 'admin:settings',
-		'extend/widgets': 'admin:settings',
-		'extend/rewards': 'admin:settings',
-	};
-	privileges.admin.routeRegexpMap = {
-		'^manage/categories/\\d+': 'admin:categories',
-		'^manage/privileges/(\\d+|admin)': 'admin:privileges',
-		'^manage/groups/.+$': 'admin:groups',
-		'^settings/[\\w\\-]+$': 'admin:settings',
-		'^appearance/[\\w]+$': 'admin:settings',
-		'^plugins/[\\w\\-]+$': 'admin:settings',
-	};
+privsAdmin.privilegeList = privsAdmin.userPrivilegeList.concat(privsAdmin.groupPrivilegeList);
 
-	// Mapping for socket call methods to a privilege
-	// In NodeBB v2, these socket calls will be removed in favour of xhr calls
-	privileges.admin.socketMap = {
-		'admin.rooms.getAll': 'admin:dashboard',
-		'admin.analytics.get': 'admin:dashboard',
+privsAdmin.getUserPrivilegeList = async () => await plugins.hooks.fire('filter:privileges.admin.list', privsAdmin.userPrivilegeList.slice());
+privsAdmin.getGroupPrivilegeList = async () => await plugins.hooks.fire('filter:privileges.admin.groups.list', privsAdmin.groupPrivilegeList.slice());
+privsAdmin.getPrivilegeList = async () => {
+	const [user, group] = await Promise.all([
+		privsAdmin.getUserPrivilegeList(),
+		privsAdmin.getGroupPrivilegeList(),
+	]);
+	return user.concat(group);
+};
 
-		'admin.categories.getAll': 'admin:categories',
-		'admin.categories.create': 'admin:categories',
-		'admin.categories.update': 'admin:categories',
-		'admin.categories.purge': 'admin:categories',
-		'admin.categories.copySettingsFrom': 'admin:categories',
+// Mapping for a page route (via direct match or regexp) to a privilege
+privsAdmin.routeMap = {
+	dashboard: 'admin:dashboard',
+	'manage/categories': 'admin:categories',
+	'manage/privileges': 'admin:privileges',
+	'manage/admins-mods': 'admin:admins-mods',
+	'manage/users': 'admin:users',
+	'manage/groups': 'admin:groups',
+	'manage/tags': 'admin:tags',
+	'settings/tags': 'admin:tags',
+	'extend/plugins': 'admin:settings',
+	'extend/widgets': 'admin:settings',
+	'extend/rewards': 'admin:settings',
+};
+privsAdmin.routePrefixMap = {
+	'manage/categories/': 'admin:categories',
+	'manage/privileges/': 'admin:privileges',
+	'manage/groups/': 'admin:groups',
+	'settings/': 'admin:settings',
+	'appearance/': 'admin:settings',
+	'plugins/': 'admin:settings',
+};
 
-		'admin.categories.getPrivilegeSettings': 'admin:privileges',
-		'admin.categories.setPrivilege': 'admin:privileges;admin:admins-mods',
-		'admin.categories.copyPrivilegesToChildren': 'admin:privileges',
-		'admin.categories.copyPrivilegesFrom': 'admin:privileges',
-		'admin.categories.copyPrivilegesToAllCategories': 'admin:privileges',
+// Mapping for socket call methods to a privilege
+// In NodeBB v2, these socket calls will be removed in favour of xhr calls
+privsAdmin.socketMap = {
+	'admin.rooms.getAll': 'admin:dashboard',
+	'admin.analytics.get': 'admin:dashboard',
 
-		'admin.user.makeAdmins': 'admin:admins-mods',
-		'admin.user.removeAdmins': 'admin:admins-mods',
+	'admin.categories.copySettingsFrom': 'admin:categories',
+	'admin.categories.copyPrivilegesToChildren': 'admin:privileges',
+	'admin.categories.copyPrivilegesFrom': 'admin:privileges',
+	'admin.categories.copyPrivilegesToAllCategories': 'admin:privileges',
 
-		'admin.user.loadGroups': 'admin:users',
-		'admin.groups.join': 'admin:users',
-		'admin.groups.leave': 'admin:users',
-		'admin.user.resetLockouts': 'admin:users',
-		'admin.user.validateEmail': 'admin:users',
-		'admin.user.sendValidationEmail': 'admin:users',
-		'admin.user.sendPasswordResetEmail': 'admin:users',
-		'admin.user.forcePasswordReset': 'admin:users',
-		'admin.user.deleteUsers': 'admin:users',
-		'admin.user.deleteUsersAndContent': 'admin:users',
-		'admin.user.createUser': 'admin:users',
-		'admin.user.invite': 'admin:users',
+	'admin.user.makeAdmins': 'admin:admins-mods',
+	'admin.user.removeAdmins': 'admin:admins-mods',
 
-		'admin.tags.create': 'admin:tags',
-		'admin.tags.update': 'admin:tags',
-		'admin.tags.rename': 'admin:tags',
-		'admin.tags.deleteTags': 'admin:tags',
+	'admin.user.loadGroups': 'admin:users',
+	'admin.groups.join': 'admin:users',
+	'admin.groups.leave': 'admin:users',
+	'admin.user.resetLockouts': 'admin:users',
+	'admin.user.validateEmail': 'admin:users',
+	'admin.user.sendValidationEmail': 'admin:users',
+	'admin.user.sendPasswordResetEmail': 'admin:users',
+	'admin.user.forcePasswordReset': 'admin:users',
+	'admin.user.invite': 'admin:users',
 
-		'admin.getSearchDict': 'admin:settings',
-		'admin.config.setMultiple': 'admin:settings',
-		'admin.config.remove': 'admin:settings',
-		'admin.themes.getInstalled': 'admin:settings',
-		'admin.themes.set': 'admin:settings',
-		'admin.reloadAllSessions': 'admin:settings',
-		'admin.settings.get': 'admin:settings',
-		'admin.settings.set': 'admin:settings',
-	};
+	'admin.tags.create': 'admin:tags',
+	'admin.tags.rename': 'admin:tags',
+	'admin.tags.deleteTags': 'admin:tags',
 
-	privileges.admin.resolve = (path) => {
-		if (privileges.admin.routeMap[path]) {
-			return privileges.admin.routeMap[path];
-		}
+	'admin.getSearchDict': 'admin:settings',
+	'admin.config.setMultiple': 'admin:settings',
+	'admin.config.remove': 'admin:settings',
+	'admin.themes.getInstalled': 'admin:settings',
+	'admin.themes.set': 'admin:settings',
+	'admin.reloadAllSessions': 'admin:settings',
+	'admin.settings.get': 'admin:settings',
+	'admin.settings.set': 'admin:settings',
+};
 
-		let privilege;
-		Object.keys(privileges.admin.routeRegexpMap).forEach((regexp) => {
-			if (!privilege) {
-				if (new RegExp(regexp).test(path)) {
-					privilege = privileges.admin.routeRegexpMap[regexp];
-				}
-			}
-		});
+privsAdmin.resolve = (path) => {
+	if (privsAdmin.routeMap.hasOwnProperty(path)) {
+		return privsAdmin.routeMap[path];
+	}
 
-		return privilege;
-	};
+	const found = Object.entries(privsAdmin.routePrefixMap).find(entry => path.startsWith(entry[0]));
+	return found ? found[1] : undefined;
+};
 
-	privileges.admin.list = async function (uid) {
-		const privilegeLabels = privileges.admin.privilegeLabels.slice();
-		const userPrivilegeList = privileges.admin.userPrivilegeList.slice();
-		const groupPrivilegeList = privileges.admin.groupPrivilegeList.slice();
+privsAdmin.list = async function (uid) {
+	const privilegeLabels = privsAdmin.privilegeLabels.slice();
+	const userPrivilegeList = privsAdmin.userPrivilegeList.slice();
+	const groupPrivilegeList = privsAdmin.groupPrivilegeList.slice();
 
-		// Restrict privileges column to superadmins
-		if (!(await user.isAdministrator(uid))) {
-			const idx = privileges.admin.userPrivilegeList.indexOf('admin:privileges');
-			privilegeLabels.splice(idx, 1);
-			userPrivilegeList.splice(idx, 1);
-			groupPrivilegeList.splice(idx, 1);
-		}
+	// Restrict privileges column to superadmins
+	if (!(await user.isAdministrator(uid))) {
+		const idx = privsAdmin.userPrivilegeList.indexOf('admin:privileges');
+		privilegeLabels.splice(idx, 1);
+		userPrivilegeList.splice(idx, 1);
+		groupPrivilegeList.splice(idx, 1);
+	}
 
-		async function getLabels() {
-			return await utils.promiseParallel({
-				users: plugins.hooks.fire('filter:privileges.admin.list_human', privilegeLabels.slice()),
-				groups: plugins.hooks.fire('filter:privileges.admin.groups.list_human', privilegeLabels.slice()),
-			});
-		}
+	const labels = await utils.promiseParallel({
+		users: plugins.hooks.fire('filter:privileges.admin.list_human', privilegeLabels.slice()),
+		groups: plugins.hooks.fire('filter:privileges.admin.groups.list_human', privilegeLabels.slice()),
+	});
 
-		const keys = await utils.promiseParallel({
-			users: plugins.hooks.fire('filter:privileges.admin.list', userPrivilegeList.slice()),
-			groups: plugins.hooks.fire('filter:privileges.admin.groups.list', groupPrivilegeList.slice()),
-		});
+	const keys = await utils.promiseParallel({
+		users: plugins.hooks.fire('filter:privileges.admin.list', userPrivilegeList.slice()),
+		groups: plugins.hooks.fire('filter:privileges.admin.groups.list', groupPrivilegeList.slice()),
+	});
 
-		const payload = await utils.promiseParallel({
-			labels: getLabels(),
-			users: helpers.getUserPrivileges(0, keys.users),
-			groups: helpers.getGroupPrivileges(0, keys.groups),
-		});
-		payload.keys = keys;
+	const payload = await utils.promiseParallel({
+		labels,
+		users: helpers.getUserPrivileges(0, keys.users),
+		groups: helpers.getGroupPrivileges(0, keys.groups),
+	});
+	payload.keys = keys;
 
-		// This is a hack because I can't do {labels.users.length} to echo the count in templates.js
-		payload.columnCount = payload.labels.users.length + 3;
-		return payload;
-	};
+	return payload;
+};
 
-	privileges.admin.get = async function (uid) {
-		const [userPrivileges, isAdministrator] = await Promise.all([
-			helpers.isAllowedTo(privileges.admin.userPrivilegeList, uid, 0),
-			user.isAdministrator(uid),
-		]);
+privsAdmin.get = async function (uid) {
+	const userPrivilegeList = await privsAdmin.getUserPrivilegeList();
+	const [userPrivileges, isAdministrator] = await Promise.all([
+		helpers.isAllowedTo(userPrivilegeList, uid, 0),
+		user.isAdministrator(uid),
+	]);
 
-		const combined = userPrivileges.map(allowed => allowed || isAdministrator);
-		const privData = _.zipObject(privileges.admin.userPrivilegeList, combined);
+	const combined = userPrivileges.map(allowed => allowed || isAdministrator);
+	const privData = _.zipObject(userPrivilegeList, combined);
 
-		privData.superadmin = isAdministrator;
-		return await plugins.hooks.fire('filter:privileges.admin.get', privData);
-	};
+	privData.superadmin = isAdministrator;
+	return await plugins.hooks.fire('filter:privileges.admin.get', privData);
+};
 
-	privileges.admin.can = async function (privilege, uid) {
-		const [isUserAllowedTo, isAdministrator] = await Promise.all([
-			helpers.isAllowedTo(privilege, uid, [0]),
-			user.isAdministrator(uid),
-		]);
-		return isAdministrator || isUserAllowedTo[0];
-	};
+privsAdmin.can = async function (privilege, uid) {
+	const [isUserAllowedTo, isAdministrator] = await Promise.all([
+		helpers.isAllowedTo(privilege, uid, [0]),
+		user.isAdministrator(uid),
+	]);
+	return isAdministrator || isUserAllowedTo[0];
+};
 
-	// privileges.admin.canGroup = async function (privilege, groupName) {
-	// 	return await groups.isMember(groupName, 'cid:0:privileges:groups:' + privilege);
-	// };
+privsAdmin.canGroup = async function (privilege, groupName) {
+	return await groups.isMember(groupName, `cid:0:privileges:groups:${privilege}`);
+};
 
-	privileges.admin.give = async function (privileges, groupName) {
-		await helpers.giveOrRescind(groups.join, privileges, 'admin', groupName);
-		plugins.hooks.fire('action:privileges.admin.give', {
-			privileges: privileges,
-			groupNames: Array.isArray(groupName) ? groupName : [groupName],
-		});
-	};
+privsAdmin.give = async function (privileges, groupName) {
+	await helpers.giveOrRescind(groups.join, privileges, 0, groupName);
+	plugins.hooks.fire('action:privileges.admin.give', {
+		privileges: privileges,
+		groupNames: Array.isArray(groupName) ? groupName : [groupName],
+	});
+};
 
-	privileges.admin.rescind = async function (privileges, groupName) {
-		await helpers.giveOrRescind(groups.leave, privileges, 'admin', groupName);
-		plugins.hooks.fire('action:privileges.admin.rescind', {
-			privileges: privileges,
-			groupNames: Array.isArray(groupName) ? groupName : [groupName],
-		});
-	};
+privsAdmin.rescind = async function (privileges, groupName) {
+	await helpers.giveOrRescind(groups.leave, privileges, 0, groupName);
+	plugins.hooks.fire('action:privileges.admin.rescind', {
+		privileges: privileges,
+		groupNames: Array.isArray(groupName) ? groupName : [groupName],
+	});
+};
 
-	// privileges.admin.userPrivileges = async function (uid) {
-	// 	const tasks = {};
-	// 	privileges.admin.userPrivilegeList.forEach(function (privilege) {
-	// 		tasks[privilege] = groups.isMember(uid, 'cid:0:privileges:' + privilege);
-	// 	});
-	// 	return await utils.promiseParallel(tasks);
-	// };
+privsAdmin.userPrivileges = async function (uid) {
+	const userPrivilegeList = await privsAdmin.getUserPrivilegeList();
+	return await helpers.userOrGroupPrivileges(0, uid, userPrivilegeList);
+};
 
-	// privileges.admin.groupPrivileges = async function (groupName) {
-	// 	const tasks = {};
-	// 	privileges.admin.groupPrivilegeList.forEach(function (privilege) {
-	// 		tasks[privilege] = groups.isMember(groupName, 'cid:0:privileges:' + privilege);
-	// 	});
-	// 	return await utils.promiseParallel(tasks);
-	// };
+privsAdmin.groupPrivileges = async function (groupName) {
+	const groupPrivilegeList = await privsAdmin.getGroupPrivilegeList();
+	return await helpers.userOrGroupPrivileges(0, groupName, groupPrivilegeList);
 };

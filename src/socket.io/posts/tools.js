@@ -1,5 +1,6 @@
 'use strict';
 
+const db = require('../../database');
 const posts = require('../../posts');
 const flags = require('../../flags');
 const events = require('../../events');
@@ -8,9 +9,6 @@ const plugins = require('../../plugins');
 const social = require('../../social');
 const user = require('../../user');
 const utils = require('../../utils');
-const api = require('../../api');
-
-const sockets = require('..');
 
 module.exports = function (SocketPosts) {
 	SocketPosts.loadPostTools = async function (socket, data) {
@@ -27,16 +25,14 @@ module.exports = function (SocketPosts) {
 			canDelete: privileges.posts.canDelete(data.pid, socket.uid),
 			canPurge: privileges.posts.canPurge(data.pid, socket.uid),
 			canFlag: privileges.posts.canFlag(data.pid, socket.uid),
-			flagged: flags.exists('post', data.pid, socket.uid),	// specifically, whether THIS calling user flagged
+			flagged: flags.exists('post', data.pid, socket.uid), // specifically, whether THIS calling user flagged
 			bookmarked: posts.hasBookmarked(data.pid, socket.uid),
-			tools: plugins.hooks.fire('filter:post.tools', { pid: data.pid, uid: socket.uid, tools: [] }),
 			postSharing: social.getActivePostSharing(),
 			history: posts.diffs.exists(data.pid),
 			canViewInfo: privileges.global.can('view:users:info', socket.uid),
 		});
 
 		const postData = results.posts;
-		postData.tools = results.tools.tools;
 		postData.bookmarked = results.bookmarked;
 		postData.selfPost = socket.uid && socket.uid === postData.uid;
 		postData.display_edit_tools = results.canEdit.flag;
@@ -53,45 +49,20 @@ module.exports = function (SocketPosts) {
 			can: results.canFlag.flag,
 			exists: !!results.posts.flagId,
 			flagged: results.flagged,
+			state: await db.getObjectField(`flag:${postData.flagId}`, 'state'),
 		};
 
 		if (!results.isAdmin && !results.canViewInfo) {
 			postData.ip = undefined;
 		}
+		const tools = await plugins.hooks.fire('filter:post.tools', {
+			pid: data.pid,
+			post: postData,
+			uid: socket.uid,
+			tools: [],
+		});
+		postData.tools = tools.tools;
 		return results;
-	};
-
-	SocketPosts.delete = async function (socket, data) {
-		sockets.warnDeprecated(socket, 'DELETE /api/v3/posts/:pid/state');
-		await api.posts.delete(socket, data);
-	};
-
-	SocketPosts.restore = async function (socket, data) {
-		sockets.warnDeprecated(socket, 'PUT /api/v3/posts/:pid/state');
-		await api.posts.restore(socket, data);
-	};
-
-	SocketPosts.deletePosts = async function (socket, data) {
-		await deletePurgePosts(socket, data, 'delete');
-	};
-
-	SocketPosts.purgePosts = async function (socket, data) {
-		await deletePurgePosts(socket, data, 'purge');
-	};
-
-	async function deletePurgePosts(socket, data, command) {
-		if (!data || !Array.isArray(data.pids)) {
-			throw new Error('[[error:invalid-data]]');
-		}
-		for (const pid of data.pids) {
-			/* eslint-disable no-await-in-loop */
-			await SocketPosts[command](socket, { pid: pid });
-		}
-	}
-
-	SocketPosts.purge = async function (socket, data) {
-		sockets.warnDeprecated(socket, 'DELETE /api/v3/posts/:pid');
-		await api.posts.purge(socket, data);
 	};
 
 	SocketPosts.changeOwner = async function (socket, data) {
@@ -103,8 +74,8 @@ module.exports = function (SocketPosts) {
 			throw new Error('[[error:no-privileges]]');
 		}
 
-		var postData = await posts.changeOwner(data.pids, data.toUid);
-		var logs = postData.map(({ pid, uid, cid }) => (events.log({
+		const postData = await posts.changeOwner(data.pids, data.toUid);
+		const logs = postData.map(({ pid, uid, cid }) => (events.log({
 			type: 'post-change-owner',
 			uid: socket.uid,
 			ip: socket.ip,

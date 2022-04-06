@@ -1,35 +1,38 @@
 'use strict';
 
 
-var	assert = require('assert');
-var async = require('async');
-var request = require('request');
-var nconf = require('nconf');
-var crypto = require('crypto');
-var fs = require('fs');
-var path = require('path');
+const assert = require('assert');
+const async = require('async');
+const request = require('request');
+const nconf = require('nconf');
+const path = require('path');
+const util = require('util');
 
-var db = require('./mocks/databasemock');
-var topics = require('../src/topics');
-var posts = require('../src/posts');
-var categories = require('../src/categories');
-var privileges = require('../src/privileges');
-var user = require('../src/user');
-var groups = require('../src/groups');
-var socketPosts = require('../src/socket.io/posts');
-var socketTopics = require('../src/socket.io/topics');
-var meta = require('../src/meta');
-var helpers = require('./helpers');
+const sleep = util.promisify(setTimeout);
 
-describe('Post\'s', function () {
-	var voterUid;
-	var voteeUid;
-	var globalModUid;
-	var postData;
-	var topicData;
-	var cid;
+const db = require('./mocks/databasemock');
+const topics = require('../src/topics');
+const posts = require('../src/posts');
+const categories = require('../src/categories');
+const privileges = require('../src/privileges');
+const user = require('../src/user');
+const groups = require('../src/groups');
+const socketPosts = require('../src/socket.io/posts');
+const apiPosts = require('../src/api/posts');
+const apiTopics = require('../src/api/topics');
+const meta = require('../src/meta');
+const file = require('../src/file');
+const helpers = require('./helpers');
 
-	before(function (done) {
+describe('Post\'s', () => {
+	let voterUid;
+	let voteeUid;
+	let globalModUid;
+	let postData;
+	let topicData;
+	let cid;
+
+	before((done) => {
 		async.series({
 			voterUid: function (next) {
 				user.create({ username: 'upvoter' }, next);
@@ -46,7 +49,7 @@ describe('Post\'s', function () {
 					description: 'Test category created by testing script',
 				}, next);
 			},
-		}, function (err, results) {
+		}, (err, results) => {
 			if (err) {
 				return done(err);
 			}
@@ -61,7 +64,7 @@ describe('Post\'s', function () {
 				cid: results.category.cid,
 				title: 'Test Topic Title',
 				content: 'The content of test topic',
-			}, function (err, data) {
+			}, (err, data) => {
 				if (err) {
 					return done(err);
 				}
@@ -73,10 +76,10 @@ describe('Post\'s', function () {
 		});
 	});
 
-	it('should update category teaser properly', async function () {
+	it('should update category teaser properly', async () => {
 		const util = require('util');
-		const getCategoriesAsync = util.promisify(async function getCategories(callback) {
-			request(nconf.get('url') + '/api/categories', { json: true }, function (err, res, body) {
+		const getCategoriesAsync = util.promisify(async (callback) => {
+			request(`${nconf.get('url')}/api/categories`, { json: true }, (err, res, body) => {
 				callback(err, body);
 			});
 		});
@@ -104,7 +107,7 @@ describe('Post\'s', function () {
 		assert.equal(data.categories[0].posts[0].pid, postResult.postData.pid);
 	});
 
-	it('should change owner of post and topic properly', async function () {
+	it('should change owner of post and topic properly', async () => {
 		const oldUid = await user.create({ username: 'olduser' });
 		const newUid = await user.create({ username: 'newuser' });
 		const postResult = await topics.post({ uid: oldUid, cid: cid, title: 'change owner', content: 'original post' });
@@ -112,11 +115,11 @@ describe('Post\'s', function () {
 		const pid1 = postResult.postData.pid;
 		const pid2 = postData.pid;
 
-		assert.deepStrictEqual(await db.sortedSetScores('tid:' + postResult.topicData.tid + ':posters', [oldUid, newUid]), [2, null]);
+		assert.deepStrictEqual(await db.sortedSetScores(`tid:${postResult.topicData.tid}:posters`, [oldUid, newUid]), [2, null]);
 
 		await posts.changeOwner([pid1, pid2], newUid);
 
-		assert.deepStrictEqual(await db.sortedSetScores('tid:' + postResult.topicData.tid + ':posters', [oldUid, newUid]), [0, 2]);
+		assert.deepStrictEqual(await db.sortedSetScores(`tid:${postResult.topicData.tid}:posters`, [oldUid, newUid]), [0, 2]);
 
 		assert.deepStrictEqual(await posts.isOwner([pid1, pid2], oldUid), [false, false]);
 		assert.deepStrictEqual(await posts.isOwner([pid1, pid2], newUid), [true, true]);
@@ -134,7 +137,7 @@ describe('Post\'s', function () {
 		assert.strictEqual(await topics.isOwner(postResult.topicData.tid, newUid), true);
 	});
 
-	it('should fail to change owner if new owner does not exist', async function () {
+	it('should fail to change owner if new owner does not exist', async () => {
 		try {
 			await posts.changeOwner([1], '9999999');
 		} catch (err) {
@@ -142,7 +145,7 @@ describe('Post\'s', function () {
 		}
 	});
 
-	it('should fail to change owner if user is not authorized', async function () {
+	it('should fail to change owner if user is not authorized', async () => {
 		try {
 			await socketPosts.changeOwner({ uid: voterUid }, { pids: [1, 2], toUid: voterUid });
 		} catch (err) {
@@ -150,49 +153,54 @@ describe('Post\'s', function () {
 		}
 	});
 
-	it('should return falsy if post does not exist', function (done) {
-		posts.getPostData(9999, function (err, postData) {
+	it('should return falsy if post does not exist', (done) => {
+		posts.getPostData(9999, (err, postData) => {
 			assert.ifError(err);
 			assert.equal(postData, null);
 			done();
 		});
 	});
 
-	describe('voting', function () {
-		it('should fail to upvote post if group does not have upvote permission', function (done) {
-			privileges.categories.rescind(['groups:posts:upvote', 'groups:posts:downvote'], cid, 'registered-users', function (err) {
-				assert.ifError(err);
-				socketPosts.upvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' }, function (err) {
-					assert.equal(err.message, '[[error:no-privileges]]');
-					socketPosts.downvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' }, function (err) {
-						assert.equal(err.message, '[[error:no-privileges]]');
-						privileges.categories.give(['groups:posts:upvote', 'groups:posts:downvote'], cid, 'registered-users', function (err) {
-							assert.ifError(err);
-							done();
-						});
-					});
-				});
-			});
+	describe('voting', () => {
+		it('should fail to upvote post if group does not have upvote permission', async () => {
+			await privileges.categories.rescind(['groups:posts:upvote', 'groups:posts:downvote'], cid, 'registered-users');
+			let err;
+			try {
+				await apiPosts.upvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' });
+			} catch (_err) {
+				err = _err;
+			}
+			assert.equal(err.message, '[[error:no-privileges]]');
+			try {
+				await apiPosts.downvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' });
+			} catch (_err) {
+				err = _err;
+			}
+			assert.equal(err.message, '[[error:no-privileges]]');
+			await privileges.categories.give(['groups:posts:upvote', 'groups:posts:downvote'], cid, 'registered-users');
 		});
 
-		it('should upvote a post', function (done) {
-			socketPosts.upvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' }, function (err, result) {
-				assert.ifError(err);
-				assert.equal(result.post.upvotes, 1);
-				assert.equal(result.post.downvotes, 0);
-				assert.equal(result.post.votes, 1);
-				assert.equal(result.user.reputation, 1);
-				posts.hasVoted(postData.pid, voterUid, function (err, data) {
-					assert.ifError(err);
-					assert.equal(data.upvoted, true);
-					assert.equal(data.downvoted, false);
-					done();
-				});
-			});
+		it('should upvote a post', async () => {
+			const result = await apiPosts.upvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' });
+			assert.equal(result.post.upvotes, 1);
+			assert.equal(result.post.downvotes, 0);
+			assert.equal(result.post.votes, 1);
+			assert.equal(result.user.reputation, 1);
+			const data = await posts.hasVoted(postData.pid, voterUid);
+			assert.equal(data.upvoted, true);
+			assert.equal(data.downvoted, false);
 		});
 
-		it('should get voters', function (done) {
-			socketPosts.getVoters({ uid: globalModUid }, { pid: postData.pid, cid: cid }, function (err, data) {
+		it('should add the pid to the :votes sorted set for that user', async () => {
+			const cid = await posts.getCidByPid(postData.pid);
+			const { uid, pid } = postData;
+
+			const score = await db.sortedSetScore(`cid:${cid}:uid:${uid}:pids:votes`, pid);
+			assert.strictEqual(score, 1);
+		});
+
+		it('should get voters', (done) => {
+			socketPosts.getVoters({ uid: globalModUid }, { pid: postData.pid, cid: cid }, (err, data) => {
 				assert.ifError(err);
 				assert.equal(data.upvoteCount, 1);
 				assert.equal(data.downvoteCount, 0);
@@ -202,8 +210,8 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should get upvoters', function (done) {
-			socketPosts.getUpvoters({ uid: globalModUid }, [postData.pid], function (err, data) {
+		it('should get upvoters', (done) => {
+			socketPosts.getUpvoters({ uid: globalModUid }, [postData.pid], (err, data) => {
 				assert.ifError(err);
 				assert.equal(data[0].otherCount, 0);
 				assert.equal(data[0].usernames, 'upvoter');
@@ -211,36 +219,34 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should unvote a post', function (done) {
-			socketPosts.unvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' }, function (err, result) {
-				assert.ifError(err);
-				assert.equal(result.post.upvotes, 0);
-				assert.equal(result.post.downvotes, 0);
-				assert.equal(result.post.votes, 0);
-				assert.equal(result.user.reputation, 0);
-				posts.hasVoted(postData.pid, voterUid, function (err, data) {
-					assert.ifError(err);
-					assert.equal(data.upvoted, false);
-					assert.equal(data.downvoted, false);
-					done();
-				});
-			});
+		it('should unvote a post', async () => {
+			const result = await apiPosts.unvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' });
+			assert.equal(result.post.upvotes, 0);
+			assert.equal(result.post.downvotes, 0);
+			assert.equal(result.post.votes, 0);
+			assert.equal(result.user.reputation, 0);
+			const data = await posts.hasVoted(postData.pid, voterUid);
+			assert.equal(data.upvoted, false);
+			assert.equal(data.downvoted, false);
 		});
 
-		it('should downvote a post', function (done) {
-			socketPosts.downvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' }, function (err, result) {
-				assert.ifError(err);
-				assert.equal(result.post.upvotes, 0);
-				assert.equal(result.post.downvotes, 1);
-				assert.equal(result.post.votes, -1);
-				assert.equal(result.user.reputation, -1);
-				posts.hasVoted(postData.pid, voterUid, function (err, data) {
-					assert.ifError(err);
-					assert.equal(data.upvoted, false);
-					assert.equal(data.downvoted, true);
-					done();
-				});
-			});
+		it('should downvote a post', async () => {
+			const result = await apiPosts.downvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' });
+			assert.equal(result.post.upvotes, 0);
+			assert.equal(result.post.downvotes, 1);
+			assert.equal(result.post.votes, -1);
+			assert.equal(result.user.reputation, -1);
+			const data = await posts.hasVoted(postData.pid, voterUid);
+			assert.equal(data.upvoted, false);
+			assert.equal(data.downvoted, true);
+		});
+
+		it('should add the pid to the :votes sorted set for that user', async () => {
+			const cid = await posts.getCidByPid(postData.pid);
+			const { uid, pid } = postData;
+
+			const score = await db.sortedSetScore(`cid:${cid}:uid:${uid}:pids:votes`, pid);
+			assert.strictEqual(score, -1);
 		});
 
 		it('should prevent downvoting more than total daily limit', async () => {
@@ -253,7 +259,7 @@ describe('Post\'s', function () {
 				content: 'raw content',
 			});
 			try {
-				await socketPosts.downvote({ uid: voterUid }, { pid: p1.pid, room_id: 'topic_1' });
+				await apiPosts.downvote({ uid: voterUid }, { pid: p1.pid, room_id: 'topic_1' });
 			} catch (_err) {
 				err = _err;
 			}
@@ -271,7 +277,7 @@ describe('Post\'s', function () {
 				content: 'raw content',
 			});
 			try {
-				await socketPosts.downvote({ uid: voterUid }, { pid: p1.pid, room_id: 'topic_1' });
+				await apiPosts.downvote({ uid: voterUid }, { pid: p1.pid, room_id: 'topic_1' });
 			} catch (_err) {
 				err = _err;
 			}
@@ -280,42 +286,32 @@ describe('Post\'s', function () {
 		});
 	});
 
-	describe('bookmarking', function () {
-		it('should bookmark a post', function (done) {
-			socketPosts.bookmark({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_' + postData.tid }, function (err, data) {
-				assert.ifError(err);
-				assert.equal(data.isBookmarked, true);
-				posts.hasBookmarked(postData.pid, voterUid, function (err, hasBookmarked) {
-					assert.ifError(err);
-					assert.equal(hasBookmarked, true);
-					done();
-				});
-			});
+	describe('bookmarking', () => {
+		it('should bookmark a post', async () => {
+			const data = await apiPosts.bookmark({ uid: voterUid }, { pid: postData.pid, room_id: `topic_${postData.tid}` });
+			assert.equal(data.isBookmarked, true);
+			const hasBookmarked = await posts.hasBookmarked(postData.pid, voterUid);
+			assert.equal(hasBookmarked, true);
 		});
 
-		it('should unbookmark a post', function (done) {
-			socketPosts.unbookmark({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_' + postData.tid }, function (err, data) {
-				assert.ifError(err);
-				assert.equal(data.isBookmarked, false);
-				posts.hasBookmarked([postData.pid], voterUid, function (err, hasBookmarked) {
-					assert.ifError(err);
-					assert.equal(hasBookmarked[0], false);
-					done();
-				});
-			});
+		it('should unbookmark a post', async () => {
+			const data = await apiPosts.unbookmark({ uid: voterUid }, { pid: postData.pid, room_id: `topic_${postData.tid}` });
+			assert.equal(data.isBookmarked, false);
+			const hasBookmarked = await posts.hasBookmarked([postData.pid], voterUid);
+			assert.equal(hasBookmarked[0], false);
 		});
 	});
 
-	describe('post tools', function () {
-		it('should error if data is invalid', function (done) {
-			socketPosts.loadPostTools({ uid: globalModUid }, null, function (err) {
+	describe('post tools', () => {
+		it('should error if data is invalid', (done) => {
+			socketPosts.loadPostTools({ uid: globalModUid }, null, (err) => {
 				assert.equal(err.message, '[[error:invalid-data]]');
 				done();
 			});
 		});
 
-		it('should load post tools', function (done) {
-			socketPosts.loadPostTools({ uid: globalModUid }, { pid: postData.pid, cid: cid }, function (err, data) {
+		it('should load post tools', (done) => {
+			socketPosts.loadPostTools({ uid: globalModUid }, { pid: postData.pid, cid: cid }, (err, data) => {
 				assert.ifError(err);
 				assert(data.posts.display_edit_tools);
 				assert(data.posts.display_delete_tools);
@@ -326,59 +322,52 @@ describe('Post\'s', function () {
 		});
 	});
 
-	describe('delete/restore/purge', function () {
-		function createTopicWithReply(callback) {
-			topics.post({
+	describe('delete/restore/purge', () => {
+		async function createTopicWithReply() {
+			const topicPostData = await topics.post({
 				uid: voterUid,
 				cid: cid,
 				title: 'topic to delete/restore/purge',
 				content: 'A post to delete/restore/purge',
-			}, function (err, topicPostData) {
-				assert.ifError(err);
-				topics.reply({
-					uid: voterUid,
-					tid: topicPostData.topicData.tid,
-					timestamp: Date.now(),
-					content: 'A post to delete/restore and purge',
-				}, function (err, replyData) {
-					assert.ifError(err);
-					callback(topicPostData, replyData);
-				});
 			});
+
+			const replyData = await topics.reply({
+				uid: voterUid,
+				tid: topicPostData.topicData.tid,
+				timestamp: Date.now(),
+				content: 'A post to delete/restore and purge',
+			});
+			return [topicPostData, replyData];
 		}
 
-		var tid;
-		var mainPid;
-		var replyPid;
+		let tid;
+		let mainPid;
+		let replyPid;
 
-		before(function (done) {
-			createTopicWithReply(function (topicPostData, replyData) {
-				tid = topicPostData.topicData.tid;
-				mainPid = topicPostData.postData.pid;
-				replyPid = replyData.pid;
-				privileges.categories.give(['groups:purge'], cid, 'registered-users', done);
-			});
+		before(async () => {
+			const [topicPostData, replyData] = await createTopicWithReply();
+			tid = topicPostData.topicData.tid;
+			mainPid = topicPostData.postData.pid;
+			replyPid = replyData.pid;
+			await privileges.categories.give(['groups:purge'], cid, 'registered-users');
 		});
 
-		it('should error with invalid data', function (done) {
-			socketPosts.delete({ uid: voterUid }, null, function (err) {
-				assert.equal(err.message, '[[error:invalid-data]]');
-				done();
-			});
+		it('should error with invalid data', async () => {
+			try {
+				await apiPosts.delete({ uid: voterUid }, null);
+			} catch (err) {
+				return assert.equal(err.message, '[[error:invalid-data]]');
+			}
+			assert(false);
 		});
 
-		it('should delete a post', function (done) {
-			socketPosts.delete({ uid: voterUid }, { pid: replyPid, tid: tid }, function (err) {
-				assert.ifError(err);
-				posts.getPostField(replyPid, 'deleted', function (err, isDeleted) {
-					assert.ifError(err);
-					assert.strictEqual(isDeleted, 1);
-					done();
-				});
-			});
+		it('should delete a post', async () => {
+			await apiPosts.delete({ uid: voterUid }, { pid: replyPid, tid: tid });
+			const isDeleted = await posts.getPostField(replyPid, 'deleted');
+			assert.strictEqual(isDeleted, 1);
 		});
 
-		it('should not see post content if global mod does not have posts:view_deleted privilege', function (done) {
+		it('should not see post content if global mod does not have posts:view_deleted privilege', (done) => {
 			async.waterfall([
 				function (next) {
 					user.create({ username: 'global mod', password: '123456' }, next);
@@ -390,11 +379,9 @@ describe('Post\'s', function () {
 					privileges.categories.rescind(['groups:posts:view_deleted'], cid, 'Global Moderators', next);
 				},
 				function (next) {
-					helpers.loginUser('global mod', '123456', function (err, _jar) {
+					helpers.loginUser('global mod', '123456', (err, data) => {
 						assert.ifError(err);
-						var jar = _jar;
-
-						request(nconf.get('url') + '/api/topic/' + tid, { jar: jar, json: true }, function (err, res, body) {
+						request(`${nconf.get('url')}/api/topic/${tid}`, { jar: data.jar, json: true }, (err, res, body) => {
 							assert.ifError(err);
 							assert.equal(body.posts[1].content, '[[topic:post_is_deleted]]');
 							privileges.categories.give(['groups:posts:view_deleted'], cid, 'Global Moderators', next);
@@ -404,75 +391,41 @@ describe('Post\'s', function () {
 			], done);
 		});
 
-		it('should restore a post', function (done) {
-			socketPosts.restore({ uid: voterUid }, { pid: replyPid, tid: tid }, function (err) {
-				assert.ifError(err);
-				posts.getPostField(replyPid, 'deleted', function (err, isDeleted) {
-					assert.ifError(err);
-					assert.strictEqual(isDeleted, 0);
-					done();
-				});
-			});
+		it('should restore a post', async () => {
+			await apiPosts.restore({ uid: voterUid }, { pid: replyPid, tid: tid });
+			const isDeleted = await posts.getPostField(replyPid, 'deleted');
+			assert.strictEqual(isDeleted, 0);
 		});
 
-		it('should delete posts', function (done) {
-			socketPosts.deletePosts({ uid: globalModUid }, { pids: [replyPid, mainPid] }, function (err) {
-				assert.ifError(err);
-				posts.getPostField(replyPid, 'deleted', function (err, deleted) {
-					assert.ifError(err);
-					assert.strictEqual(deleted, 1);
-					posts.getPostField(mainPid, 'deleted', function (err, deleted) {
-						assert.ifError(err);
-						assert.strictEqual(deleted, 1);
-						done();
-					});
-				});
-			});
+		it('should delete topic if last main post is deleted', async () => {
+			const data = await topics.post({ uid: voterUid, cid: cid, title: 'test topic', content: 'test topic' });
+			await apiPosts.delete({ uid: globalModUid }, { pid: data.postData.pid });
+			const deleted = await topics.getTopicField(data.topicData.tid, 'deleted');
+			assert.strictEqual(deleted, 1);
 		});
 
-		it('should delete topic if last main post is deleted', function (done) {
-			topics.post({ uid: voterUid, cid: cid, title: 'test topic', content: 'test topic' }, function (err, data) {
-				assert.ifError(err);
-				socketPosts.deletePosts({ uid: globalModUid }, { pids: [data.postData.pid] }, function (err) {
-					assert.ifError(err);
-					topics.getTopicField(data.topicData.tid, 'deleted', function (err, deleted) {
-						assert.ifError(err);
-						assert.strictEqual(deleted, 1);
-						done();
-					});
-				});
-			});
-		});
-
-		it('should purge posts and purge topic', function (done) {
-			createTopicWithReply(function (topicPostData, replyData) {
-				socketPosts.purgePosts({ uid: voterUid }, { pids: [replyData.pid, topicPostData.postData.pid], tid: topicPostData.topicData.tid }, function (err) {
-					assert.ifError(err);
-					posts.exists('post:' + replyData.pid, function (err, exists) {
-						assert.ifError(err);
-						assert.equal(exists, false);
-						topics.exists(topicPostData.topicData.tid, function (err, exists) {
-							assert.ifError(err);
-							assert(!exists);
-							done();
-						});
-					});
-				});
-			});
+		it('should purge posts and purge topic', async () => {
+			const [topicPostData, replyData] = await createTopicWithReply();
+			await apiPosts.purge({ uid: voterUid }, { pid: replyData.pid });
+			await apiPosts.purge({ uid: voterUid }, { pid: topicPostData.postData.pid });
+			const pidExists = await posts.exists(replyData.pid);
+			assert.strictEqual(pidExists, false);
+			const tidExists = await topics.exists(topicPostData.topicData.tid);
+			assert.strictEqual(tidExists, false);
 		});
 	});
 
-	describe('edit', function () {
-		var pid;
-		var replyPid;
-		var tid;
-		before(function (done) {
+	describe('edit', () => {
+		let pid;
+		let replyPid;
+		let tid;
+		before((done) => {
 			topics.post({
 				uid: voterUid,
 				cid: cid,
 				title: 'topic to edit',
 				content: 'A post to edit',
-			}, function (err, data) {
+			}, (err, data) => {
 				assert.ifError(err);
 				pid = data.postData.pid;
 				tid = data.topicData.tid;
@@ -481,7 +434,7 @@ describe('Post\'s', function () {
 					tid: tid,
 					timestamp: Date.now(),
 					content: 'A reply to edit',
-				}, function (err, data) {
+				}, (err, data) => {
 					assert.ifError(err);
 					replyPid = data.pid;
 					privileges.categories.give(['groups:posts:edit'], cid, 'registered-users', done);
@@ -489,73 +442,90 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should error if user is not logged in', function (done) {
-			socketPosts.edit({ uid: 0 }, {}, function (err) {
-				assert.equal(err.message, '[[error:not-logged-in]]');
-				done();
-			});
-		});
-
-		it('should error if data is invalid or missing', function (done) {
-			socketPosts.edit({ uid: voterUid }, {}, function (err) {
-				assert.equal(err.message, '[[error:invalid-data]]');
-				done();
-			});
-		});
-
-		it('should error if title is too short', function (done) {
-			socketPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content', title: 'a' }, function (err) {
-				assert.equal(err.message, '[[error:title-too-short, ' + meta.config.minimumTitleLength + ']]');
-				done();
-			});
-		});
-
-		it('should error if title is too long', function (done) {
-			var longTitle = new Array(meta.config.maximumTitleLength + 2).join('a');
-			socketPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content', title: longTitle }, function (err) {
-				assert.equal(err.message, '[[error:title-too-long, ' + meta.config.maximumTitleLength + ']]');
-				done();
-			});
-		});
-
-		it('should error with too few tags', function (done) {
-			var oldValue = meta.config.minimumTagsPerTopic;
-			meta.config.minimumTagsPerTopic = 1;
-			socketPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content', tags: [] }, function (err) {
-				assert.equal(err.message, '[[error:not-enough-tags, ' + meta.config.minimumTagsPerTopic + ']]');
-				meta.config.minimumTagsPerTopic = oldValue;
-				done();
-			});
-		});
-
-		it('should error with too many tags', function (done) {
-			var tags = [];
-			for (var i = 0; i < meta.config.maximumTagsPerTopic + 1; i += 1) {
-				tags.push('tag' + i);
+		it('should error if user is not logged in', async () => {
+			try {
+				await apiPosts.edit({ uid: 0 }, { pid: pid, content: 'gg' });
+			} catch (err) {
+				return assert.equal(err.message, '[[error:not-logged-in]]');
 			}
-			socketPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content', tags: tags }, function (err) {
-				assert.equal(err.message, '[[error:too-many-tags, ' + meta.config.maximumTagsPerTopic + ']]');
-				done();
-			});
+			assert(false);
 		});
 
-		it('should error if content is too short', function (done) {
-			socketPosts.edit({ uid: voterUid }, { pid: pid, content: 'e' }, function (err) {
-				assert.equal(err.message, '[[error:content-too-short, ' + meta.config.minimumPostLength + ']]');
-				done();
-			});
+		it('should error if data is invalid or missing', async () => {
+			try {
+				await apiPosts.edit({ uid: voterUid }, {});
+			} catch (err) {
+				return assert.equal(err.message, '[[error:invalid-data]]');
+			}
+			assert(false);
 		});
 
-		it('should error if content is too long', function (done) {
-			var longContent = new Array(meta.config.maximumPostLength + 2).join('a');
-			socketPosts.edit({ uid: voterUid }, { pid: pid, content: longContent }, function (err) {
-				assert.equal(err.message, '[[error:content-too-long, ' + meta.config.maximumPostLength + ']]');
-				done();
-			});
+		it('should error if title is too short', async () => {
+			try {
+				await apiPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content', title: 'a' });
+			} catch (err) {
+				return assert.equal(err.message, `[[error:title-too-short, ${meta.config.minimumTitleLength}]]`);
+			}
+			assert(false);
 		});
 
-		it('should edit post', async function () {
-			const data = await socketPosts.edit({ uid: voterUid }, {
+		it('should error if title is too long', async () => {
+			const longTitle = new Array(meta.config.maximumTitleLength + 2).join('a');
+			try {
+				await apiPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content', title: longTitle });
+			} catch (err) {
+				return assert.equal(err.message, `[[error:title-too-long, ${meta.config.maximumTitleLength}]]`);
+			}
+			assert(false);
+		});
+
+		it('should error with too few tags', async () => {
+			const oldValue = meta.config.minimumTagsPerTopic;
+			meta.config.minimumTagsPerTopic = 1;
+			try {
+				await apiPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content', tags: [] });
+			} catch (err) {
+				assert.equal(err.message, `[[error:not-enough-tags, ${meta.config.minimumTagsPerTopic}]]`);
+				meta.config.minimumTagsPerTopic = oldValue;
+				return;
+			}
+			assert(false);
+		});
+
+		it('should error with too many tags', async () => {
+			const tags = [];
+			for (let i = 0; i < meta.config.maximumTagsPerTopic + 1; i += 1) {
+				tags.push(`tag${i}`);
+			}
+			try {
+				await apiPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content', tags: tags });
+			} catch (err) {
+				return assert.equal(err.message, `[[error:too-many-tags, ${meta.config.maximumTagsPerTopic}]]`);
+			}
+			assert(false);
+		});
+
+		it('should error if content is too short', async () => {
+			try {
+				await apiPosts.edit({ uid: voterUid }, { pid: pid, content: 'e' });
+			} catch (err) {
+				return assert.equal(err.message, `[[error:content-too-short, ${meta.config.minimumPostLength}]]`);
+			}
+			assert(false);
+		});
+
+		it('should error if content is too long', async () => {
+			const longContent = new Array(meta.config.maximumPostLength + 2).join('a');
+			try {
+				await apiPosts.edit({ uid: voterUid }, { pid: pid, content: longContent });
+			} catch (err) {
+				return assert.equal(err.message, `[[error:content-too-long, ${meta.config.maximumPostLength}]]`);
+			}
+			assert(false);
+		});
+
+		it('should edit post', async () => {
+			const data = await apiPosts.edit({ uid: voterUid }, {
 				pid: pid,
 				content: 'edited post content',
 				title: 'edited title',
@@ -566,48 +536,42 @@ describe('Post\'s', function () {
 			assert.strictEqual(data.editor, voterUid);
 			assert.strictEqual(data.topic.title, 'edited title');
 			assert.strictEqual(data.topic.tags[0].value, 'edited');
-			const res = await db.getObject('post:' + pid);
+			const res = await db.getObject(`post:${pid}`);
 			assert(!res.hasOwnProperty('bookmarks'));
 		});
 
-		it('should disallow post editing for new users if post was made past the threshold for editing', function (done) {
+		it('should disallow post editing for new users if post was made past the threshold for editing', async () => {
 			meta.config.newbiePostEditDuration = 1;
-			setTimeout(function () {
-				socketPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content again', title: 'edited title again', tags: ['edited-twice'] }, function (err, data) {
-					assert.equal(err.message, '[[error:post-edit-duration-expired, 1]]');
-					meta.config.newbiePostEditDuration = 3600;
-					done();
-				});
-			}, 1000);
+			await sleep(1000);
+			try {
+				await apiPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited post content again', title: 'edited title again', tags: ['edited-twice'] });
+			} catch (err) {
+				assert.equal(err.message, '[[error:post-edit-duration-expired, 1]]');
+				meta.config.newbiePostEditDuration = 3600;
+				return;
+			}
+			assert(false);
 		});
 
-		it('should edit a deleted post', function (done) {
-			socketPosts.delete({ uid: voterUid }, { pid: pid, tid: tid }, function (err) {
-				assert.ifError(err);
-				socketPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited deleted content', title: 'edited deleted title', tags: ['deleted'] }, function (err, data) {
-					assert.ifError(err);
-					assert.equal(data.content, 'edited deleted content');
-					assert.equal(data.editor, voterUid);
-					assert.equal(data.topic.title, 'edited deleted title');
-					assert.equal(data.topic.tags[0].value, 'deleted');
-					done();
-				});
-			});
+		it('should edit a deleted post', async () => {
+			await apiPosts.delete({ uid: voterUid }, { pid: pid, tid: tid });
+			const data = await apiPosts.edit({ uid: voterUid }, { pid: pid, content: 'edited deleted content', title: 'edited deleted title', tags: ['deleted'] });
+			assert.equal(data.content, 'edited deleted content');
+			assert.equal(data.editor, voterUid);
+			assert.equal(data.topic.title, 'edited deleted title');
+			assert.equal(data.topic.tags[0].value, 'deleted');
 		});
 
-		it('should edit a reply post', function (done) {
-			socketPosts.edit({ uid: voterUid }, { pid: replyPid, content: 'edited reply' }, function (err, data) {
-				assert.ifError(err);
-				assert.equal(data.content, 'edited reply');
-				assert.equal(data.editor, voterUid);
-				assert.equal(data.topic.isMainPost, false);
-				assert.equal(data.topic.renamed, false);
-				done();
-			});
+		it('should edit a reply post', async () => {
+			const data = await apiPosts.edit({ uid: voterUid }, { pid: replyPid, content: 'edited reply' });
+			assert.equal(data.content, 'edited reply');
+			assert.equal(data.editor, voterUid);
+			assert.equal(data.topic.isMainPost, false);
+			assert.equal(data.topic.renamed, false);
 		});
 
-		it('should return diffs', function (done) {
-			posts.diffs.get(replyPid, 0, function (err, data) {
+		it('should return diffs', (done) => {
+			posts.diffs.get(replyPid, 0, (err, data) => {
 				assert.ifError(err);
 				assert(Array.isArray(data));
 				assert(data[0].pid, replyPid);
@@ -616,121 +580,134 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should load diffs and reconstruct post', function (done) {
-			posts.diffs.load(replyPid, 0, voterUid, function (err, data) {
+		it('should load diffs and reconstruct post', (done) => {
+			posts.diffs.load(replyPid, 0, voterUid, (err, data) => {
 				assert.ifError(err);
 				assert.equal(data.content, 'A reply to edit');
 				done();
 			});
 		});
 
-		it('should not allow guests to view diffs', function (done) {
-			socketPosts.getDiffs({ uid: 0 }, { pid: 1 }, function (err) {
-				assert.equal(err.message, '[[error:no-privileges]]');
-				done();
+		it('should not allow guests to view diffs', async () => {
+			let err = {};
+			try {
+				await apiPosts.getDiffs({ uid: 0 }, { pid: 1 });
+			} catch (_err) {
+				err = _err;
+			}
+			assert.strictEqual(err.message, '[[error:no-privileges]]');
+		});
+
+		it('should allow registered-users group to view diffs', async () => {
+			const data = await apiPosts.getDiffs({ uid: 1 }, { pid: 1 });
+
+			assert.strictEqual('boolean', typeof data.editable);
+			assert.strictEqual(false, data.editable);
+
+			assert.equal(true, Array.isArray(data.timestamps));
+			assert.strictEqual(1, data.timestamps.length);
+
+			assert.equal(true, Array.isArray(data.revisions));
+			assert.strictEqual(data.timestamps.length, data.revisions.length);
+			['timestamp', 'username'].every(prop => Object.keys(data.revisions[0]).includes(prop));
+		});
+
+		it('should not delete first diff of a post', async () => {
+			const timestamps = await posts.diffs.list(replyPid);
+			await assert.rejects(async () => {
+				await posts.diffs.delete(replyPid, timestamps[0], voterUid);
+			}, {
+				message: '[[error:invalid-data]]',
 			});
 		});
 
-		it('should allow registered-users group to view diffs', function (done) {
-			socketPosts.getDiffs({ uid: 1 }, { pid: 1 }, function (err, data) {
-				assert.ifError(err);
+		it('should delete a post diff', async () => {
+			await apiPosts.edit({ uid: voterUid }, { pid: replyPid, content: 'another edit has been made' });
+			await apiPosts.edit({ uid: voterUid }, { pid: replyPid, content: 'most recent edit' });
+			const timestamp = (await posts.diffs.list(replyPid)).pop();
+			await posts.diffs.delete(replyPid, timestamp, voterUid);
+			const differentTimestamp = (await posts.diffs.list(replyPid)).pop();
+			assert.notStrictEqual(timestamp, differentTimestamp);
+		});
 
-				assert.strictEqual('boolean', typeof data.editable);
-				assert.strictEqual(false, data.editable);
-
-				assert.equal(true, Array.isArray(data.timestamps));
-				assert.strictEqual(1, data.timestamps.length);
-
-				assert.equal(true, Array.isArray(data.revisions));
-				assert.strictEqual(data.timestamps.length, data.revisions.length);
-				['timestamp', 'username'].every(prop => Object.keys(data.revisions[0]).includes(prop));
-				done();
-			});
+		it('should load (oldest) diff and reconstruct post correctly after a diff deletion', async () => {
+			const data = await posts.diffs.load(replyPid, 0, voterUid);
+			assert.strictEqual(data.content, 'A reply to edit');
 		});
 	});
 
-	describe('move', function () {
-		var replyPid;
-		var tid;
-		var moveTid;
+	describe('move', () => {
+		let replyPid;
+		let tid;
+		let moveTid;
 
-		before(function (done) {
-			async.waterfall([
-				function (next) {
-					topics.post({
-						uid: voterUid,
-						cid: cid,
-						title: 'topic 1',
-						content: 'some content',
-					}, next);
-				},
-				function (data, next) {
-					tid = data.topicData.tid;
-					topics.post({
-						uid: voterUid,
-						cid: cid,
-						title: 'topic 2',
-						content: 'some content',
-					}, next);
-				},
-				function (data, next) {
-					moveTid = data.topicData.tid;
-					topics.reply({
-						uid: voterUid,
-						tid: tid,
-						timestamp: Date.now(),
-						content: 'A reply to move',
-					}, function (err, data) {
-						assert.ifError(err);
-						replyPid = data.pid;
-						next();
-					});
-				},
-			], done);
-		});
-
-		it('should error if uid is not logged in', function (done) {
-			socketPosts.movePost({ uid: 0 }, {}, function (err) {
-				assert.equal(err.message, '[[error:not-logged-in]]');
-				done();
+		before(async () => {
+			const topic1 = await topics.post({
+				uid: voterUid,
+				cid: cid,
+				title: 'topic 1',
+				content: 'some content',
 			});
-		});
-
-		it('should error if data is invalid', function (done) {
-			socketPosts.movePost({ uid: globalModUid }, {}, function (err) {
-				assert.equal(err.message, '[[error:invalid-data]]');
-				done();
+			tid = topic1.topicData.tid;
+			const topic2 = await topics.post({
+				uid: voterUid,
+				cid: cid,
+				title: 'topic 2',
+				content: 'some content',
 			});
-		});
+			moveTid = topic2.topicData.tid;
 
-		it('should error if user does not have move privilege', function (done) {
-			socketPosts.movePost({ uid: voterUid }, { pid: replyPid, tid: moveTid }, function (err) {
-				assert.equal(err.message, '[[error:no-privileges]]');
-				done();
+			const reply = await topics.reply({
+				uid: voterUid,
+				tid: tid,
+				timestamp: Date.now(),
+				content: 'A reply to move',
 			});
+			replyPid = reply.pid;
 		});
 
-
-		it('should move a post', function (done) {
-			socketPosts.movePost({ uid: globalModUid }, { pid: replyPid, tid: moveTid }, function (err) {
-				assert.ifError(err);
-				posts.getPostField(replyPid, 'tid', function (err, tid) {
-					assert.ifError(err);
-					assert(tid, moveTid);
-					done();
-				});
-			});
+		it('should error if uid is not logged in', async () => {
+			try {
+				await apiPosts.move({ uid: 0 }, {});
+			} catch (err) {
+				return assert.equal(err.message, '[[error:not-logged-in]]');
+			}
+			assert(false);
 		});
 
-		it('should fail to move post if not moderator of target category', async function () {
+		it('should error if data is invalid', async () => {
+			try {
+				await apiPosts.move({ uid: globalModUid }, {});
+			} catch (err) {
+				return assert.equal(err.message, '[[error:invalid-data]]');
+			}
+			assert(false);
+		});
+
+		it('should error if user does not have move privilege', async () => {
+			try {
+				await apiPosts.move({ uid: voterUid }, { pid: replyPid, tid: moveTid });
+			} catch (err) {
+				return assert.equal(err.message, '[[error:no-privileges]]');
+			}
+			assert(false);
+		});
+
+		it('should move a post', async () => {
+			await apiPosts.move({ uid: globalModUid }, { pid: replyPid, tid: moveTid });
+			const tid = await posts.getPostField(replyPid, 'tid');
+			assert(tid, moveTid);
+		});
+
+		it('should fail to move post if not moderator of target category', async () => {
 			const cat1 = await categories.create({ name: 'Test Category', description: 'Test category created by testing script' });
 			const cat2 = await categories.create({ name: 'Test Category', description: 'Test category created by testing script' });
-			const result = await socketTopics.post({ uid: globalModUid }, { title: 'target topic', content: 'queued topic', cid: cat2.cid });
+			const result = await apiTopics.create({ uid: globalModUid }, { title: 'target topic', content: 'queued topic', cid: cat2.cid });
 			const modUid = await user.create({ username: 'modofcat1' });
-			await privileges.categories.give(privileges.userPrivilegeList, cat1.cid, modUid);
+			await privileges.categories.give(privileges.categories.userPrivilegeList, cat1.cid, modUid);
 			let err;
 			try {
-				await socketPosts.movePost({ uid: modUid }, { pid: replyPid, tid: result.tid });
+				await apiPosts.move({ uid: modUid }, { pid: replyPid, tid: result.tid });
 			} catch (_err) {
 				err = _err;
 			}
@@ -738,17 +715,17 @@ describe('Post\'s', function () {
 		});
 	});
 
-	describe('getPostSummaryByPids', function () {
-		it('should return empty array for empty pids', function (done) {
-			posts.getPostSummaryByPids([], 0, {}, function (err, data) {
+	describe('getPostSummaryByPids', () => {
+		it('should return empty array for empty pids', (done) => {
+			posts.getPostSummaryByPids([], 0, {}, (err, data) => {
 				assert.ifError(err);
 				assert.equal(data.length, 0);
 				done();
 			});
 		});
 
-		it('should get post summaries', function (done) {
-			posts.getPostSummaryByPids([postData.pid], 0, {}, function (err, data) {
+		it('should get post summaries', (done) => {
+			posts.getPostSummaryByPids([postData.pid], 0, {}, (err, data) => {
 				assert.ifError(err);
 				assert(data[0].user);
 				assert(data[0].topic);
@@ -758,15 +735,15 @@ describe('Post\'s', function () {
 		});
 	});
 
-	it('should get recent poster uids', function (done) {
+	it('should get recent poster uids', (done) => {
 		topics.reply({
 			uid: voterUid,
 			tid: topicData.tid,
 			timestamp: Date.now(),
 			content: 'some content',
-		}, function (err) {
+		}, (err) => {
 			assert.ifError(err);
-			posts.getRecentPosterUids(0, 1, function (err, uids) {
+			posts.getRecentPosterUids(0, 1, (err, uids) => {
 				assert.ifError(err);
 				assert(Array.isArray(uids));
 				assert.equal(uids.length, 2);
@@ -776,25 +753,25 @@ describe('Post\'s', function () {
 		});
 	});
 
-	describe('parse', function () {
-		it('should not crash and return falsy if post data is falsy', function (done) {
-			posts.parsePost(null, function (err, postData) {
+	describe('parse', () => {
+		it('should not crash and return falsy if post data is falsy', (done) => {
+			posts.parsePost(null, (err, postData) => {
 				assert.ifError(err);
 				assert.strictEqual(postData, null);
 				done();
 			});
 		});
 
-		it('should store post content in cache', function (done) {
-			var oldValue = global.env;
+		it('should store post content in cache', (done) => {
+			const oldValue = global.env;
 			global.env = 'production';
-			var postData = {
+			const postData = {
 				pid: 9999,
 				content: 'some post content',
 			};
-			posts.parsePost(postData, function (err) {
+			posts.parsePost(postData, (err) => {
 				assert.ifError(err);
-				posts.parsePost(postData, function (err) {
+				posts.parsePost(postData, (err) => {
 					assert.ifError(err);
 					global.env = oldValue;
 					done();
@@ -802,14 +779,14 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should parse signature and remove links and images', function (done) {
+		it('should parse signature and remove links and images', (done) => {
 			meta.config['signatures:disableLinks'] = 1;
 			meta.config['signatures:disableImages'] = 1;
-			var userData = {
+			const userData = {
 				signature: '<img src="boop"/><a href="link">test</a> derp',
 			};
 
-			posts.parseSignature(userData, 1, function (err, data) {
+			posts.parseSignature(userData, 1, (err, data) => {
 				assert.ifError(err);
 				assert.equal(data.userData.signature, 'test derp');
 				meta.config['signatures:disableLinks'] = 0;
@@ -818,74 +795,78 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should turn relative links in post body to absolute urls', function (done) {
-			var nconf = require('nconf');
-			var content = '<a href="/users">test</a> <a href="youtube.com">youtube</a>';
-			var parsedContent = posts.relativeToAbsolute(content, posts.urlRegex);
-			assert.equal(parsedContent, '<a href="' + nconf.get('base_url') + '/users">test</a> <a href="//youtube.com">youtube</a>');
+		it('should turn relative links in post body to absolute urls', (done) => {
+			const nconf = require('nconf');
+			const content = '<a href="/users">test</a> <a href="youtube.com">youtube</a>';
+			const parsedContent = posts.relativeToAbsolute(content, posts.urlRegex);
+			assert.equal(parsedContent, `<a href="${nconf.get('base_url')}/users">test</a> <a href="//youtube.com">youtube</a>`);
 			done();
 		});
 
-		it('should turn relative links in post body to absolute urls', function (done) {
-			var nconf = require('nconf');
-			var content = '<a href="/users">test</a> <a href="youtube.com">youtube</a> some test <img src="/path/to/img"/>';
-			var parsedContent = posts.relativeToAbsolute(content, posts.urlRegex);
+		it('should turn relative links in post body to absolute urls', (done) => {
+			const nconf = require('nconf');
+			const content = '<a href="/users">test</a> <a href="youtube.com">youtube</a> some test <img src="/path/to/img"/>';
+			let parsedContent = posts.relativeToAbsolute(content, posts.urlRegex);
 			parsedContent = posts.relativeToAbsolute(parsedContent, posts.imgRegex);
-			assert.equal(parsedContent, '<a href="' + nconf.get('base_url') + '/users">test</a> <a href="//youtube.com">youtube</a> some test <img src="' + nconf.get('base_url') + '/path/to/img"/>');
+			assert.equal(parsedContent, `<a href="${nconf.get('base_url')}/users">test</a> <a href="//youtube.com">youtube</a> some test <img src="${nconf.get('base_url')}/path/to/img"/>`);
 			done();
 		});
 	});
 
-	describe('socket methods', function () {
-		var pid;
-		before(function (done) {
+	describe('socket methods', () => {
+		let pid;
+		before((done) => {
 			topics.reply({
 				uid: voterUid,
 				tid: topicData.tid,
 				timestamp: Date.now(),
 				content: 'raw content',
-			}, function (err, postData) {
+			}, (err, postData) => {
 				assert.ifError(err);
 				pid = postData.pid;
 				privileges.categories.rescind(['groups:topics:read'], cid, 'guests', done);
 			});
 		});
 
-		it('should error with invalid data', function (done) {
-			socketPosts.reply({ uid: 0 }, null, function (err) {
+		it('should error with invalid data', async () => {
+			try {
+				await apiTopics.reply({ uid: 0 }, null);
+				assert(false);
+			} catch (err) {
 				assert.equal(err.message, '[[error:invalid-data]]');
-				done();
-			});
+			}
 		});
 
-		it('should error with invalid tid', function (done) {
-			socketPosts.reply({ uid: 0 }, { tid: 0, content: 'derp' }, function (err) {
+		it('should error with invalid tid', async () => {
+			try {
+				await apiTopics.reply({ uid: 0 }, { tid: 0, content: 'derp' });
+				assert(false);
+			} catch (err) {
 				assert.equal(err.message, '[[error:invalid-data]]');
-				done();
-			});
+			}
 		});
 
-		it('should fail to get raw post because of privilege', function (done) {
-			socketPosts.getRawPost({ uid: 0 }, pid, function (err) {
+		it('should fail to get raw post because of privilege', (done) => {
+			socketPosts.getRawPost({ uid: 0 }, pid, (err) => {
 				assert.equal(err.message, '[[error:no-privileges]]');
 				done();
 			});
 		});
 
-		it('should fail to get raw post because post is deleted', function (done) {
-			posts.setPostField(pid, 'deleted', 1, function (err) {
+		it('should fail to get raw post because post is deleted', (done) => {
+			posts.setPostField(pid, 'deleted', 1, (err) => {
 				assert.ifError(err);
-				socketPosts.getRawPost({ uid: voterUid }, pid, function (err) {
+				socketPosts.getRawPost({ uid: voterUid }, pid, (err) => {
 					assert.equal(err.message, '[[error:no-post]]');
 					done();
 				});
 			});
 		});
 
-		it('should get raw post content', function (done) {
-			posts.setPostField(pid, 'deleted', 0, function (err) {
+		it('should get raw post content', (done) => {
+			posts.setPostField(pid, 'deleted', 0, (err) => {
 				assert.ifError(err);
-				socketPosts.getRawPost({ uid: voterUid }, pid, function (err, postContent) {
+				socketPosts.getRawPost({ uid: voterUid }, pid, (err, postContent) => {
 					assert.ifError(err);
 					assert.equal(postContent, 'raw content');
 					done();
@@ -893,93 +874,43 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should get post', function (done) {
-			socketPosts.getPost({ uid: voterUid }, pid, function (err, postData) {
-				assert.ifError(err);
-				assert(postData);
-				done();
-			});
+		it('should get post', async () => {
+			const postData = await apiPosts.get({ uid: voterUid }, { pid });
+			assert(postData);
 		});
 
-		it('shold error with invalid data', function (done) {
-			socketPosts.loadMoreBookmarks({ uid: voterUid }, { uid: voterUid, after: null }, function (err) {
-				assert.equal(err.message, '[[error:invalid-data]]');
-				done();
-			});
-		});
-
-		it('should load more bookmarks', function (done) {
-			socketPosts.loadMoreBookmarks({ uid: voterUid }, { uid: voterUid, after: 0 }, function (err, data) {
-				assert.ifError(err);
-				assert(data);
-				done();
-			});
-		});
-
-		it('should load more user posts', function (done) {
-			socketPosts.loadMoreUserPosts({ uid: voterUid }, { uid: voterUid, after: 0 }, function (err, data) {
-				assert.ifError(err);
-				assert(data);
-				done();
-			});
-		});
-
-		it('should load more best posts', function (done) {
-			socketPosts.loadMoreBestPosts({ uid: voterUid }, { uid: voterUid, after: 0 }, function (err, data) {
-				assert.ifError(err);
-				assert(data);
-				done();
-			});
-		});
-
-		it('should load more up voted posts', function (done) {
-			socketPosts.loadMoreUpVotedPosts({ uid: voterUid }, { uid: voterUid, after: 0 }, function (err, data) {
-				assert.ifError(err);
-				assert(data);
-				done();
-			});
-		});
-
-		it('should load more down voted posts', function (done) {
-			socketPosts.loadMoreDownVotedPosts({ uid: voterUid }, { uid: voterUid, after: 0 }, function (err, data) {
-				assert.ifError(err);
-				assert(data);
-				done();
-			});
-		});
-
-		it('should get post category', function (done) {
-			socketPosts.getCategory({ uid: voterUid }, pid, function (err, postCid) {
+		it('should get post category', (done) => {
+			socketPosts.getCategory({ uid: voterUid }, pid, (err, postCid) => {
 				assert.ifError(err);
 				assert.equal(cid, postCid);
 				done();
 			});
 		});
 
-		it('should error with invalid data', function (done) {
-			socketPosts.getPidIndex({ uid: voterUid }, null, function (err) {
+		it('should error with invalid data', (done) => {
+			socketPosts.getPidIndex({ uid: voterUid }, null, (err) => {
 				assert.equal(err.message, '[[error:invalid-data]]');
 				done();
 			});
 		});
 
-		it('should get pid index', function (done) {
-			socketPosts.getPidIndex({ uid: voterUid }, { pid: pid, tid: topicData.tid, topicPostSort: 'oldest_to_newest' }, function (err, index) {
+		it('should get pid index', (done) => {
+			socketPosts.getPidIndex({ uid: voterUid }, { pid: pid, tid: topicData.tid, topicPostSort: 'oldest_to_newest' }, (err, index) => {
 				assert.ifError(err);
 				assert.equal(index, 4);
 				done();
 			});
 		});
 
-		it('should get pid index in reverse', function (done) {
+		it('should get pid index in reverse', (done) => {
 			topics.reply({
 				uid: voterUid,
 				tid: topicData.tid,
 				content: 'raw content',
-			}, function (err, postData) {
+			}, (err, postData) => {
 				assert.ifError(err);
 
-				socketPosts.getPidIndex({ uid: voterUid }, { pid: postData.pid, tid: topicData.tid, topicPostSort: 'newest_to_oldest' }, function (err, index) {
+				socketPosts.getPidIndex({ uid: voterUid }, { pid: postData.pid, tid: topicData.tid, topicPostSort: 'newest_to_oldest' }, (err, index) => {
 					assert.ifError(err);
 					assert.equal(index, 1);
 					done();
@@ -988,33 +919,33 @@ describe('Post\'s', function () {
 		});
 	});
 
-	describe('filterPidsByCid', function () {
-		it('should return pids as is if cid is falsy', function (done) {
-			posts.filterPidsByCid([1, 2, 3], null, function (err, pids) {
+	describe('filterPidsByCid', () => {
+		it('should return pids as is if cid is falsy', (done) => {
+			posts.filterPidsByCid([1, 2, 3], null, (err, pids) => {
 				assert.ifError(err);
 				assert.deepEqual([1, 2, 3], pids);
 				done();
 			});
 		});
 
-		it('should filter pids by single cid', function (done) {
-			posts.filterPidsByCid([postData.pid, 100, 101], cid, function (err, pids) {
+		it('should filter pids by single cid', (done) => {
+			posts.filterPidsByCid([postData.pid, 100, 101], cid, (err, pids) => {
 				assert.ifError(err);
 				assert.deepEqual([postData.pid], pids);
 				done();
 			});
 		});
 
-		it('should filter pids by multiple cids', function (done) {
-			posts.filterPidsByCid([postData.pid, 100, 101], [cid, 2, 3], function (err, pids) {
+		it('should filter pids by multiple cids', (done) => {
+			posts.filterPidsByCid([postData.pid, 100, 101], [cid, 2, 3], (err, pids) => {
 				assert.ifError(err);
 				assert.deepEqual([postData.pid], pids);
 				done();
 			});
 		});
 
-		it('should filter pids by multiple cids', function (done) {
-			posts.filterPidsByCid([postData.pid, 100, 101], [cid], function (err, pids) {
+		it('should filter pids by multiple cids', (done) => {
+			posts.filterPidsByCid([postData.pid, 100, 101], [cid], (err, pids) => {
 				assert.ifError(err);
 				assert.deepEqual([postData.pid], pids);
 				done();
@@ -1022,59 +953,52 @@ describe('Post\'s', function () {
 		});
 	});
 
-	it('should error if user does not exist', function (done) {
-		user.isReadyToPost(21123123, 1, function (err) {
+	it('should error if user does not exist', (done) => {
+		user.isReadyToPost(21123123, 1, (err) => {
 			assert.equal(err.message, '[[error:no-user]]');
 			done();
 		});
 	});
 
-	describe('post queue', function () {
-		var uid;
-		var queueId;
-		var topicQueueId;
-		var jar;
-		before(function (done) {
+	describe('post queue', () => {
+		let uid;
+		let queueId;
+		let topicQueueId;
+		let jar;
+		before((done) => {
 			meta.config.postQueue = 1;
-			user.create({ username: 'newuser' }, function (err, _uid) {
+			user.create({ username: 'newuser' }, (err, _uid) => {
 				assert.ifError(err);
 				uid = _uid;
 				done();
 			});
 		});
 
-		after(function (done) {
+		after((done) => {
 			meta.config.postQueue = 0;
 			meta.config.groupsExemptFromPostQueue = [];
 			done();
 		});
 
-		it('should add topic to post queue', function (done) {
-			socketTopics.post({ uid: uid }, { title: 'should be queued', content: 'queued topic content', cid: cid }, function (err, result) {
-				assert.ifError(err);
-				assert.strictEqual(result.queued, true);
-				assert.equal(result.message, '[[success:post-queued]]');
-				topicQueueId = result.id;
-
-				done();
-			});
+		it('should add topic to post queue', async () => {
+			const result = await apiTopics.create({ uid: uid }, { title: 'should be queued', content: 'queued topic content', cid: cid });
+			assert.strictEqual(result.queued, true);
+			assert.equal(result.message, '[[success:post-queued]]');
+			topicQueueId = result.id;
 		});
 
-		it('should add reply to post queue', function (done) {
-			socketPosts.reply({ uid: uid }, { content: 'this is a queued reply', tid: topicData.tid }, function (err, result) {
-				assert.ifError(err);
-				assert.strictEqual(result.queued, true);
-				assert.equal(result.message, '[[success:post-queued]]');
-				queueId = result.id;
-				done();
-			});
+		it('should add reply to post queue', async () => {
+			const result = await apiTopics.reply({ uid: uid }, { content: 'this is a queued reply', tid: topicData.tid });
+			assert.strictEqual(result.queued, true);
+			assert.equal(result.message, '[[success:post-queued]]');
+			queueId = result.id;
 		});
 
-		it('should load queued posts', function (done) {
-			helpers.loginUser('globalmod', 'globalmodpwd', function (err, _jar) {
-				jar = _jar;
+		it('should load queued posts', (done) => {
+			helpers.loginUser('globalmod', 'globalmodpwd', (err, data) => {
+				jar = data.jar;
 				assert.ifError(err);
-				request(nconf.get('url') + '/api/post-queue', { jar: jar, json: true }, function (err, res, body) {
+				request(`${nconf.get('url')}/api/post-queue`, { jar: jar, json: true }, (err, res, body) => {
 					assert.ifError(err);
 					assert.equal(body.posts[0].type, 'topic');
 					assert.equal(body.posts[0].data.content, 'queued topic content');
@@ -1085,17 +1009,17 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should error if data is invalid', function (done) {
-			socketPosts.editQueuedContent({ uid: globalModUid }, null, function (err) {
+		it('should error if data is invalid', (done) => {
+			socketPosts.editQueuedContent({ uid: globalModUid }, null, (err) => {
 				assert.equal(err.message, '[[error:invalid-data]]');
 				done();
 			});
 		});
 
-		it('should edit post in queue', function (done) {
-			socketPosts.editQueuedContent({ uid: globalModUid }, { id: queueId, content: 'newContent' }, function (err) {
+		it('should edit post in queue', (done) => {
+			socketPosts.editQueuedContent({ uid: globalModUid }, { id: queueId, content: 'newContent' }, (err) => {
 				assert.ifError(err);
-				request(nconf.get('url') + '/api/post-queue', { jar: jar, json: true }, function (err, res, body) {
+				request(`${nconf.get('url')}/api/post-queue`, { jar: jar, json: true }, (err, res, body) => {
 					assert.ifError(err);
 					assert.equal(body.posts[1].type, 'reply');
 					assert.equal(body.posts[1].data.content, 'newContent');
@@ -1104,10 +1028,10 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should edit topic title in queue', function (done) {
-			socketPosts.editQueuedContent({ uid: globalModUid }, { id: topicQueueId, title: 'new topic title' }, function (err) {
+		it('should edit topic title in queue', (done) => {
+			socketPosts.editQueuedContent({ uid: globalModUid }, { id: topicQueueId, title: 'new topic title' }, (err) => {
 				assert.ifError(err);
-				request(nconf.get('url') + '/api/post-queue', { jar: jar, json: true }, function (err, res, body) {
+				request(`${nconf.get('url')}/api/post-queue`, { jar: jar, json: true }, (err, res, body) => {
 					assert.ifError(err);
 					assert.equal(body.posts[0].type, 'topic');
 					assert.equal(body.posts[0].data.title, 'new topic title');
@@ -1116,14 +1040,14 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should edit topic category in queue', function (done) {
-			socketPosts.editQueuedContent({ uid: globalModUid }, { id: topicQueueId, cid: 2 }, function (err) {
+		it('should edit topic category in queue', (done) => {
+			socketPosts.editQueuedContent({ uid: globalModUid }, { id: topicQueueId, cid: 2 }, (err) => {
 				assert.ifError(err);
-				request(nconf.get('url') + '/api/post-queue', { jar: jar, json: true }, function (err, res, body) {
+				request(`${nconf.get('url')}/api/post-queue`, { jar: jar, json: true }, (err, res, body) => {
 					assert.ifError(err);
 					assert.equal(body.posts[0].type, 'topic');
 					assert.equal(body.posts[0].data.cid, 2);
-					socketPosts.editQueuedContent({ uid: globalModUid }, { id: topicQueueId, cid: cid }, function (err) {
+					socketPosts.editQueuedContent({ uid: globalModUid }, { id: topicQueueId, cid: cid }, (err) => {
 						assert.ifError(err);
 						done();
 					});
@@ -1131,22 +1055,22 @@ describe('Post\'s', function () {
 			});
 		});
 
-		it('should prevent regular users from approving posts', function (done) {
-			socketPosts.accept({ uid: uid }, { id: queueId }, function (err) {
+		it('should prevent regular users from approving posts', (done) => {
+			socketPosts.accept({ uid: uid }, { id: queueId }, (err) => {
 				assert.equal(err.message, '[[error:no-privileges]]');
 				done();
 			});
 		});
 
-		it('should prevent regular users from approving non existing posts', function (done) {
-			socketPosts.accept({ uid: uid }, { id: 123123 }, function (err) {
+		it('should prevent regular users from approving non existing posts', (done) => {
+			socketPosts.accept({ uid: uid }, { id: 123123 }, (err) => {
 				assert.equal(err.message, '[[error:no-privileges]]');
 				done();
 			});
 		});
 
-		it('should accept queued posts and submit', function (done) {
-			var ids;
+		it('should accept queued posts and submit', (done) => {
+			let ids;
 			async.waterfall([
 				function (next) {
 					db.getSortedSetRange('post:queue', 0, -1, next);
@@ -1161,272 +1085,159 @@ describe('Post\'s', function () {
 			], done);
 		});
 
-		it('should not crash if id does not exist', function (done) {
-			socketPosts.reject({ uid: globalModUid }, { id: '123123123' }, function (err) {
+		it('should not crash if id does not exist', (done) => {
+			socketPosts.reject({ uid: globalModUid }, { id: '123123123' }, (err) => {
 				assert.equal(err.message, '[[error:no-privileges]]');
 				done();
 			});
 		});
 
-		it('should bypass post queue if user is in exempt group', function (done) {
+		it('should bypass post queue if user is in exempt group', async () => {
+			const oldValue = meta.config.groupsExemptFromPostQueue;
 			meta.config.groupsExemptFromPostQueue = ['registered-users'];
-			socketTopics.post({ uid: uid, emit: () => {} }, { title: 'should not be queued', content: 'topic content', cid: cid }, function (err, result) {
-				assert.ifError(err);
-				assert.strictEqual(result.title, 'should not be queued');
-				done();
-			});
+			const uid = await user.create({ username: 'mergeexemptuser' });
+			const result = await apiTopics.create({ uid: uid, emit: () => {} }, { title: 'should not be queued', content: 'topic content', cid: cid });
+			assert.strictEqual(result.title, 'should not be queued');
+			meta.config.groupsExemptFromPostQueue = oldValue;
+		});
+
+		it('should update queued post\'s topic if target topic is merged', async () => {
+			const uid = await user.create({ username: 'mergetestsuser' });
+			const result1 = await apiTopics.create({ uid: globalModUid }, { title: 'topic A', content: 'topic A content', cid: cid });
+			const result2 = await apiTopics.create({ uid: globalModUid }, { title: 'topic B', content: 'topic B content', cid: cid });
+
+			const result = await apiTopics.reply({ uid: uid }, { content: 'the moved queued post', tid: result1.tid });
+
+			await topics.merge([
+				result1.tid, result2.tid,
+			], globalModUid, { mainTid: result2.tid });
+
+			let postData = await posts.getQueuedPosts();
+			postData = postData.filter(p => parseInt(p.data.tid, 10) === parseInt(result2.tid, 10));
+			assert.strictEqual(postData.length, 1);
+			assert.strictEqual(postData[0].data.content, 'the moved queued post');
+			assert.strictEqual(postData[0].data.tid, result2.tid);
 		});
 	});
 
-	describe('upload methods', function () {
-		let pid;
-		let purgePid;
-
+	describe('Topic Backlinks', () => {
+		let tid1;
 		before(async () => {
-			// Create stub files for testing
-			['abracadabra.png', 'shazam.jpg', 'whoa.gif', 'amazeballs.jpg', 'wut.txt', 'test.bmp']
-				.forEach(filename => fs.closeSync(fs.openSync(path.join(nconf.get('upload_path'), 'files', filename), 'w')));
-
-			const topicPostData = await topics.post({
+			tid1 = await topics.post({
 				uid: 1,
-				cid: 1,
-				title: 'topic with some images',
-				content: 'here is an image [alt text](/assets/uploads/files/abracadabra.png) and another [alt text](/assets/uploads/files/shazam.jpg)',
+				cid,
+				title: 'Topic backlink testing - topic 1',
+				content: 'Some text here for the OP',
 			});
-			pid = topicPostData.postData.pid;
-
-			const purgePostData = await topics.post({
-				uid: 1,
-				cid: 1,
-				title: 'topic with some images, to be purged',
-				content: 'here is an image [alt text](/assets/uploads/files/whoa.gif) and another [alt text](/assets/uploads/files/amazeballs.jpg)',
-			});
-			purgePid = purgePostData.postData.pid;
+			tid1 = tid1.topicData.tid;
 		});
 
-		describe('.sync()', function () {
-			it('should properly add new images to the post\'s zset', function (done) {
-				posts.uploads.sync(pid, function (err) {
-					assert.ifError(err);
-
-					db.sortedSetCard('post:' + pid + ':uploads', function (err, length) {
-						assert.ifError(err);
-						assert.strictEqual(length, 2);
-						done();
-					});
-				});
+		describe('.syncBacklinks()', () => {
+			it('should error on invalid data', async () => {
+				try {
+					await topics.syncBacklinks();
+				} catch (e) {
+					assert(e);
+					assert.strictEqual(e.message, '[[error:invalid-data]]');
+				}
 			});
 
-			it('should remove an image if it is edited out of the post', function (done) {
-				async.series([
-					function (next) {
-						posts.edit({
-							pid: pid,
-							uid: 1,
-							content: 'here is an image [alt text](/assets/uploads/files/abracadabra.png)... AND NO MORE!',
-						}, next);
-					},
-					async.apply(posts.uploads.sync, pid),
-				], function (err) {
-					assert.ifError(err);
-					db.sortedSetCard('post:' + pid + ':uploads', function (err, length) {
-						assert.ifError(err);
-						assert.strictEqual(1, length);
-						done();
-					});
+			it('should do nothing if the post does not contain a link to a topic', async () => {
+				const backlinks = await topics.syncBacklinks({
+					content: 'This is a post\'s content',
 				});
-			});
-		});
 
-		describe('.list()', function () {
-			it('should display the uploaded files for a specific post', function (done) {
-				posts.uploads.list(pid, function (err, uploads) {
-					assert.ifError(err);
-					assert.equal(true, Array.isArray(uploads));
-					assert.strictEqual(1, uploads.length);
-					assert.equal('string', typeof uploads[0]);
-					done();
+				assert.strictEqual(backlinks, 0);
+			});
+
+			it('should create a backlink if it detects a topic link in a post', async () => {
+				const count = await topics.syncBacklinks({
+					pid: 2,
+					content: `This is a link to [topic 1](${nconf.get('url')}/topic/1/abcdef)`,
 				});
+				const events = await topics.events.get(1, 1);
+				const backlinks = await db.getSortedSetMembers('pid:2:backlinks');
+
+				assert.strictEqual(count, 1);
+				assert(events);
+				assert.strictEqual(events.length, 1);
+				assert(backlinks);
+				assert(backlinks.includes('1'));
+			});
+
+			it('should remove the backlink (but keep the event) if the post no longer contains a link to a topic', async () => {
+				const count = await topics.syncBacklinks({
+					pid: 2,
+					content: 'This is a link to [nothing](http://example.org)',
+				});
+				const events = await topics.events.get(1, 1);
+				const backlinks = await db.getSortedSetMembers('pid:2:backlinks');
+
+				assert.strictEqual(count, 0);
+				assert(events);
+				assert.strictEqual(events.length, 1);
+				assert(backlinks);
+				assert.strictEqual(backlinks.length, 0);
 			});
 		});
 
-		describe('.isOrphan()', function () {
-			it('should return false if upload is not an orphan', function (done) {
-				posts.uploads.isOrphan('abracadabra.png', function (err, isOrphan) {
-					assert.ifError(err);
-					assert.equal(false, isOrphan);
-					done();
+		describe('integration tests', () => {
+			it('should create a topic event in the referenced topic', async () => {
+				const topic = await topics.post({
+					uid: 1,
+					cid,
+					title: 'Topic backlink testing - topic 2',
+					content: `Some text here for the OP &ndash; ${nconf.get('url')}/topic/${tid1}`,
 				});
+
+				const events = await topics.events.get(tid1, 1);
+				assert(events);
+				assert.strictEqual(events.length, 1);
+				assert.strictEqual(events[0].type, 'backlink');
+				assert.strictEqual(parseInt(events[0].uid, 10), 1);
+				assert.strictEqual(events[0].href, `/post/${topic.postData.pid}`);
 			});
 
-			it('should return true if upload is an orphan', function (done) {
-				posts.uploads.isOrphan('shazam.jpg', function (err, isOrphan) {
-					assert.ifError(err);
-					assert.equal(true, isOrphan);
-					done();
+			it('should not create a topic event if referenced topic is the same as current topic', async () => {
+				await topics.reply({
+					uid: 1,
+					tid: tid1,
+					content: `Referencing itself &ndash; ${nconf.get('url')}/topic/${tid1}`,
 				});
-			});
-		});
 
-		describe('.associate()', function () {
-			it('should add an image to the post\'s maintained list of uploads', function (done) {
-				async.waterfall([
-					async.apply(posts.uploads.associate, pid, 'whoa.gif'),
-					async.apply(posts.uploads.list, pid),
-				], function (err, uploads) {
-					assert.ifError(err);
-					assert.strictEqual(2, uploads.length);
-					assert.strictEqual(true, uploads.includes('whoa.gif'));
-					done();
+				const events = await topics.events.get(tid1, 1);
+				assert(events);
+				assert.strictEqual(events.length, 1); // should still equal 1
+			});
+
+			it('should not show backlink events if the feature is disabled', async () => {
+				meta.config.topicBacklinks = 0;
+
+				await topics.post({
+					uid: 1,
+					cid,
+					title: 'Topic backlink testing - topic 3',
+					content: `Some text here for the OP &ndash; ${nconf.get('url')}/topic/${tid1}`,
 				});
-			});
 
-			it('should allow arrays to be passed in', function (done) {
-				async.waterfall([
-					async.apply(posts.uploads.associate, pid, ['amazeballs.jpg', 'wut.txt']),
-					async.apply(posts.uploads.list, pid),
-				], function (err, uploads) {
-					assert.ifError(err);
-					assert.strictEqual(4, uploads.length);
-					assert.strictEqual(true, uploads.includes('amazeballs.jpg'));
-					assert.strictEqual(true, uploads.includes('wut.txt'));
-					done();
-				});
-			});
-
-			it('should save a reverse association of md5sum to pid', function (done) {
-				const md5 = filename => crypto.createHash('md5').update(filename).digest('hex');
-
-				async.waterfall([
-					async.apply(posts.uploads.associate, pid, ['test.bmp']),
-					function (next) {
-						db.getSortedSetRange('upload:' + md5('test.bmp') + ':pids', 0, -1, next);
-					},
-				], function (err, pids) {
-					assert.ifError(err);
-					assert.strictEqual(true, Array.isArray(pids));
-					assert.strictEqual(true, pids.length > 0);
-					assert.equal(pid, pids[0]);
-					done();
-				});
-			});
-
-			it('should not associate a file that does not exist on the local disk', function (done) {
-				async.waterfall([
-					async.apply(posts.uploads.associate, pid, ['nonexistant.xls']),
-					async.apply(posts.uploads.list, pid),
-				], function (err, uploads) {
-					assert.ifError(err);
-					assert.strictEqual(uploads.length, 5);
-					assert.strictEqual(false, uploads.includes('nonexistant.xls'));
-					done();
-				});
-			});
-		});
-
-		describe('.dissociate()', function () {
-			it('should remove an image from the post\'s maintained list of uploads', function (done) {
-				async.waterfall([
-					async.apply(posts.uploads.dissociate, pid, 'whoa.gif'),
-					async.apply(posts.uploads.list, pid),
-				], function (err, uploads) {
-					assert.ifError(err);
-					assert.strictEqual(4, uploads.length);
-					assert.strictEqual(false, uploads.includes('whoa.gif'));
-					done();
-				});
-			});
-
-			it('should allow arrays to be passed in', function (done) {
-				async.waterfall([
-					async.apply(posts.uploads.dissociate, pid, ['amazeballs.jpg', 'wut.txt']),
-					async.apply(posts.uploads.list, pid),
-				], function (err, uploads) {
-					assert.ifError(err);
-					assert.strictEqual(2, uploads.length);
-					assert.strictEqual(false, uploads.includes('amazeballs.jpg'));
-					assert.strictEqual(false, uploads.includes('wut.txt'));
-					done();
-				});
-			});
-		});
-
-		describe('.dissociateAll()', () => {
-			it('should remove all images from a post\'s maintained list of uploads', async () => {
-				await posts.uploads.dissociateAll(pid);
-				const uploads = await posts.uploads.list(pid);
-
-				assert.equal(uploads.length, 0);
-			});
-		});
-
-		describe('Dissociation on purge', () => {
-			it('should not dissociate images on post deletion', async () => {
-				await posts.delete(purgePid, 1);
-				const uploads = await posts.uploads.list(purgePid);
-
-				assert.equal(uploads.length, 2);
-			});
-
-			it('should dissociate images on post purge', async () => {
-				await posts.purge(purgePid, 1);
-				const uploads = await posts.uploads.list(purgePid);
-
-				assert.equal(uploads.length, 0);
+				const events = await topics.events.get(tid1, 1);
+				assert(events);
+				assert.strictEqual(events.length, 0);
 			});
 		});
 	});
+});
 
-	describe('post uploads management', function () {
-		let topic;
-		let reply;
-		before(function (done) {
-			topics.post({
-				uid: 1,
-				cid: cid,
-				title: 'topic to test uploads with',
-				content: '[abcdef](/assets/uploads/files/abracadabra.png)',
-			}, function (err, topicPostData) {
-				assert.ifError(err);
-				topics.reply({
-					uid: 1,
-					tid: topicPostData.topicData.tid,
-					timestamp: Date.now(),
-					content: '[abcdef](/assets/uploads/files/shazam.jpg)',
-				}, function (err, replyData) {
-					assert.ifError(err);
-					topic = topicPostData;
-					reply = replyData;
-					done();
-				});
-			});
-		});
+describe('Posts\'', async () => {
+	let files;
 
-		it('should automatically sync uploads on topic create and reply', function (done) {
-			db.sortedSetsCard(['post:' + topic.topicData.mainPid + ':uploads', 'post:' + reply.pid + ':uploads'], function (err, lengths) {
-				assert.ifError(err);
-				assert.strictEqual(1, lengths[0]);
-				assert.strictEqual(1, lengths[1]);
-				done();
-			});
-		});
+	before(async () => {
+		files = await file.walk(path.resolve(__dirname, './posts'));
+	});
 
-		it('should automatically sync uploads on post edit', function (done) {
-			async.waterfall([
-				async.apply(posts.edit, {
-					pid: reply.pid,
-					uid: 1,
-					content: 'no uploads',
-				}),
-				function (postData, next) {
-					posts.uploads.list(reply.pid, next);
-				},
-			], function (err, uploads) {
-				assert.ifError(err);
-				assert.strictEqual(true, Array.isArray(uploads));
-				assert.strictEqual(0, uploads.length);
-				done();
-			});
+	it('subfolder tests', () => {
+		files.forEach((filePath) => {
+			require(filePath);
 		});
 	});
 });

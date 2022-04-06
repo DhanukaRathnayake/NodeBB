@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = function (module) {
-	var helpers = require('./helpers');
+	const helpers = require('./helpers');
 
 	module.setAdd = async function (key, value) {
 		if (!Array.isArray(value)) {
@@ -10,7 +10,7 @@ module.exports = function (module) {
 		if (!value.length) {
 			return;
 		}
-		await module.client.async.sadd(key, value);
+		await module.client.sadd(key, value);
 	};
 
 	module.setsAdd = async function (keys, value) {
@@ -29,20 +29,23 @@ module.exports = function (module) {
 		if (!Array.isArray(key)) {
 			key = [key];
 		}
+		if (!value.length) {
+			return;
+		}
 
-		var batch = module.client.batch();
+		const batch = module.client.batch();
 		key.forEach(k => batch.srem(String(k), value));
 		await helpers.execBatch(batch);
 	};
 
 	module.setsRemove = async function (keys, value) {
-		var batch = module.client.batch();
+		const batch = module.client.batch();
 		keys.forEach(k => batch.srem(String(k), value));
 		await helpers.execBatch(batch);
 	};
 
 	module.isSetMember = async function (key, value) {
-		const result = await module.client.async.sismember(key, value);
+		const result = await module.client.sismember(key, value);
 		return result === 1;
 	};
 
@@ -61,7 +64,7 @@ module.exports = function (module) {
 	};
 
 	module.getSetMembers = async function (key) {
-		return await module.client.async.smembers(key);
+		return await module.client.smembers(key);
 	};
 
 	module.getSetsMembers = async function (keys) {
@@ -71,7 +74,7 @@ module.exports = function (module) {
 	};
 
 	module.setCount = async function (key) {
-		return await module.client.async.scard(key);
+		return await module.client.scard(key);
 	};
 
 	module.setsCount = async function (keys) {
@@ -81,7 +84,7 @@ module.exports = function (module) {
 	};
 
 	module.setRemoveRandom = async function (key) {
-		return await module.client.async.spop(key);
+		return await module.client.spop(key);
 	};
 
 	return module;

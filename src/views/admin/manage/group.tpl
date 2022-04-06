@@ -99,14 +99,14 @@
 
 				<div class="form-group">
 					<label for="memberPostCids">[[groups:details.member-post-cids]]</label>
-					<select multiple="true" name="memberPostCids" id="memberPostCids" class="form-control" size="15">
-						{{{each group.categories}}}
-						<option value="{categories.cid}"{{{ if ../selected }}} selected{{{ end }}}>
-							{../level}{../name}
-						</option>
-						{{{end}}}
-					</select>
-					<p class="help-block">[[groups:details.member-post-cids-help]]</p>
+					<div class="row">
+						<div class="col-md-9">
+							<input id="memberPostCids" type="text" class="form-control" value="{group.memberPostCids}">
+						</div>
+						<div class="col-md-3 member-post-cids-selector">
+							<!-- IMPORT partials/category-selector.tpl -->
+						</div>
+					</div>
 				</div>
 
 				<hr />
@@ -133,17 +133,17 @@
 				</div>
 				<ul component="group-list" class="dropdown-menu group-dropdown-menu" role="menu">
 					<li component="group-no-matches" role="presentation" class="group hidden">
-						<a role="menu-item">[[search:no-matches]]</a>
+						<a role="menuitem">[[search:no-matches]]</a>
 					</li>
 					<!-- BEGIN groupNames -->
 					<li role="presentation" class="group" data-name="{groupNames.displayName}">
-						<a href="{config.relative_path}/admin/manage/groups/{groupNames.encodedName}" role="menu-item">{groupNames.displayName}</a>
+						<a href="{config.relative_path}/admin/manage/groups/{groupNames.encodedName}" role="menuitem">{groupNames.displayName}</a>
 					</li>
 					<!-- END groupNames -->
 				</ul>
 			</div>
 			<hr />
-			<div class="well">
+			<div class="well edit-privileges-selector">
 				<strong class="pull-left">[[admin/manage/privileges:edit-privileges]]</strong><br />
 				<!-- IMPORT partials/category-selector.tpl -->
 			</div>

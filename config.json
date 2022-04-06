@@ -1,14 +1,13 @@
 {
-    "url": "http://localhost:4567",
-    "secret": "d8300394-db19-4426-bdd3-ad5e9da500e8",
-    "database": "mongo",
-    "port": "4567",
-    "mongo": {
-        "host": "ec2-3-144-134-42.us-east-2.compute.amazonaws.com",
-        "port": "27017",
-        "username": "nodebb",
-        "password": "pw@nodeBB11",
-        "database": "nodebb",
-        "uri": ""
-    }
+  "url": "https://test.forum.365crypto.com",
+  "secret": "185e3a91-f3ee-4fb9-9e88-11816f8cc6e9",
+  "database": "mongo",
+  "mongo": {
+    "host": "127.0.0.1",
+    "port": 27017,
+    "username": "",
+    "password": "",
+    "database": "365kubetest",
+    "uri": "mongodb+srv://265test:bbpZw99dxDIWRZzp@365crypto-test-cluster1.7flqd.mongodb.net/365kubetest"
+  }
 }

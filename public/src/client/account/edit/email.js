@@ -1,14 +1,14 @@
 'use strict';
 
-define('forum/account/edit/email', ['forum/account/header', 'api'], function (header, api) {
-	var AccountEditEmail = {};
+define('forum/account/edit/email', ['forum/account/header', 'api', 'alerts'], function (header, api, alerts) {
+	const AccountEditEmail = {};
 
 	AccountEditEmail.init = function () {
 		header.init();
 
 		$('#submitBtn').on('click', function () {
-			var curPasswordEl = $('#inputCurrentPassword');
-			var userData = {
+			const curPasswordEl = $('#inputCurrentPassword');
+			const userData = {
 				uid: $('#inputUID').val(),
 				email: $('#inputNewEmail').val(),
 				password: curPasswordEl.val(),
@@ -20,16 +20,21 @@ define('forum/account/edit/email', ['forum/account/header', 'api'], function (he
 
 			if (userData.email === userData.password) {
 				curPasswordEl.parents('.control-group').toggleClass('has-error', true);
-				return app.alertError('[[user:email_same_as_password]]');
+				return alerts.error('[[user:email_same_as_password]]');
 			}
 
-			var btn = $(this);
+			const btn = $(this);
 			btn.addClass('disabled').find('i').removeClass('hide');
 
 			api.put('/users/' + userData.uid, userData).then((res) => {
 				btn.removeClass('disabled').find('i').addClass('hide');
 				ajaxify.go('user/' + res.userslug + '/edit');
-			}).catch(app.alertError);
+			}).catch((err) => {
+				setTimeout(() => {
+					btn.removeClass('disabled').find('i').addClass('hide');
+					alerts.error(err);
+				}, 300); // for UX: this call is too fast.
+			});
 
 			return false;
 		});

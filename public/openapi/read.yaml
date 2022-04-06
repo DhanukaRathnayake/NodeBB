@@ -13,7 +13,7 @@ info:
 
     ## Shortcomings
 
-    The Read API is named because its primary use is by NodeBB itself when navigating between pages. Therefore, the routes almost universally always follow the same path as actual pages on NodeBB itself. There are also a small number of non-`GET` routes, which doesn't necessarily make sense in a Read API. These will be merged into the Write API in time.
+    The Read API is named because its primary use is by NodeBB itself when navigating between pages. Therefore, the routes almost universally always follow the same path as actual pages on NodeBB itself. There are also a small number of non-`GET` routes, which do not make sense in a Read API. These will be merged into the Write API in time.
 
     ## Authentication
 
@@ -21,14 +21,23 @@ info:
 
     ### Cookie Authentication
 
-    This default authentication behaviour of this API is via cookie jar to find a valid session. A valid login session is required for API calls that pertain to operations involving a logged-in user. For example, `/api/unread` is a route showing unread topics, and is not accessible by guest users.
+    By default, the API will attempt to find a valid session in the browser's cookies. A valid login session is required for API calls that pertain to operations involving a logged-in user. For example, `/api/unread` is a route showing unread topics, and is not accessible by guest users.
+
+    Most data transfer utilities like cURL will allow you to construct something like a cookie, to be sent alongside the request, to function much like a browser cookie. This should work with the API.
 
     ### Bearer Authentication
 
-    Both the Read API and Write API offers bearer authentication, as administered through the administration panel.
+    Both the Read API and Write API offer bearer authentication, as administered through the administration panel.
 
-      * For NodeBB v1.x, this is provided by [`nodebb-plugin-write-api`](https://github.com/NodeBB/nodebb-plugin-write-api). The Write API plugin needs to be installed before authentication via bearer token is enabled on routes provided by the Read API.
-      * For NodeBB v2.x+ (in development), the Write API is available in core, and bearer authentication is available out-of-the-box
+      * Up until v1.14.3, this is provided by [`nodebb-plugin-write-api`](https://github.com/NodeBB/nodebb-plugin-write-api). The Write API plugin needs to be installed before authentication via bearer token is enabled on routes provided by the Read API.
+      * From NodeBB v1.15.0 onwards, the Write API is available in core, and bearer authentication is available out-of-the-box
+
+    In both cases, a bearer token is issued in the NodeBB admin panel in order to grant access to the API.
+
+    There are two types of tokens:
+      * A *user token* is associated with a specific uid, and all calls made are made in the name of that user
+      * A *master token* is not associated with any specific uid, though a `_uid` parameter is required in the request, and then all calls are made in the name of *that* user.
+        This is the only difference between the two tokens. A master token with `_uid` set to a non-administrator will not allow you to make administrative calls.
 tags:
   - name: home
     description: Routes used at the forum index only
@@ -63,6 +72,14 @@ paths:
     $ref: 'read/admin.yaml'
   /api/admin/dashboard:
     $ref: 'read/admin/dashboard.yaml'
+  /api/admin/dashboard/logins:
+    $ref: 'read/admin/dashboard/logins.yaml'
+  /api/admin/dashboard/users:
+    $ref: 'read/admin/dashboard/users.yaml'
+  /api/admin/dashboard/topics:
+    $ref: 'read/admin/dashboard/topics.yaml'
+  /api/admin/dashboard/searches:
+    $ref: 'read/admin/dashboard/searches.yaml'
   "/api/admin/settings/{term}":
     $ref: 'read/admin/settings/term.yaml'
   /api/admin/settings/languages:
@@ -163,18 +180,14 @@ paths:
     $ref: 'read/user/username/username.yaml'
   "/api/user/email/{email}":
     $ref: 'read/user/email/email.yaml'
-  "/api/user/uid/{userslug}/export/posts":
-    $ref: 'read/user/uid/userslug/export/posts.yaml'
-  "/api/user/uid/{userslug}/export/uploads":
-    $ref: 'read/user/uid/userslug/export/uploads.yaml'
-  "/api/user/uid/{userslug}/export/profile":
-    $ref: 'read/user/uid/userslug/export/profile.yaml'
-  "/api/{type}/pid/{id}":
-    $ref: 'read/post/pid/id.yaml'
-  "/api/{type}/tid/{id}":
-    $ref: 'read/topic/tid/id.yaml'
-  "/api/{type}/cid/{id}":
-    $ref: 'read/category/cid/id.yaml'
+  "/api/user/{userslug}/export/posts":
+    $ref: 'read/user/userslug/export/posts.yaml'
+  "/api/user/{userslug}/export/uploads":
+    $ref: 'read/user/userslug/export/uploads.yaml'
+  "/api/user/{userslug}/export/profile":
+    $ref: 'read/user/userslug/export/profile.yaml'
+  "/api/user/uid/{userslug}/export/{type}":
+    $ref: 'read/user/uid/userslug/export/type.yaml'
   /api/categories:
     $ref: 'read/categories.yaml'
   "/api/categories/{cid}/moderators":
@@ -225,6 +238,8 @@ paths:
     $ref: 'read/flags/flagId.yaml'
   /api/post-queue:
     $ref: 'read/post-queue.yaml'
+  "/api/post-queue/{id}":
+    $ref: 'read/post-queue.yaml'
   /api/ip-blacklist:
     $ref: 'read/ip-blacklist.yaml'
   /api/registration-queue:
@@ -263,6 +278,8 @@ paths:
     $ref: 'read/user/userslug/topics.yaml'
   "/api/user/{userslug}/best":
     $ref: 'read/user/userslug/best.yaml'
+  "/api/user/{userslug}/controversial":
+    $ref: 'read/user/userslug/controversial.yaml'
   "/api/user/{userslug}/groups":
     $ref: 'read/user/userslug/groups.yaml'
   "/api/user/{userslug}/bookmarks":

@@ -1,13 +1,15 @@
 
 'use strict';
 
-var topics = require('../topics');
-var utils = require('../utils');
+const topics = require('../topics');
+const user = require('../user');
+const utils = require('../utils');
 
 module.exports = function (Posts) {
 	Posts.getPostsFromSet = async function (set, start, stop, uid, reverse) {
 		const pids = await Posts.getPidsFromSet(set, start, stop, reverse);
-		return await Posts.getPostsByPids(pids, uid);
+		const posts = await Posts.getPostsByPids(pids, uid);
+		return await user.blocks.filter(uid, posts);
 	};
 
 	Posts.isMain = async function (pids) {
@@ -37,12 +39,12 @@ module.exports = function (Posts) {
 			topics.getTopicsFields(tids, ['slug']),
 		]);
 
-		const paths = pids.map(function (pid, index) {
+		const paths = pids.map((pid, index) => {
 			const slug = topicData[index] ? topicData[index].slug : null;
 			const postIndex = utils.isNumber(indices[index]) ? parseInt(indices[index], 10) + 1 : null;
 
 			if (slug && postIndex) {
-				return '/topic/' + slug + '/' + postIndex;
+				return `/topic/${slug}/${postIndex}`;
 			}
 			return null;
 		});

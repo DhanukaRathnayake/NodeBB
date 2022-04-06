@@ -2,26 +2,25 @@
 
 
 define('admin/manage/tags', [
-	'forum/infinitescroll',
+	'bootbox',
+	'alerts',
 	'admin/modules/selectable',
-], function (infinitescroll, selectable) {
-	var	Tags = {};
-	var timeoutId = 0;
+], function (bootbox, alerts, selectable) {
+	const Tags = {};
 
 	Tags.init = function () {
 		selectable.enable('.tag-management', '.tag-row');
 
 		handleCreate();
 		handleSearch();
-		handleModify();
 		handleRename();
 		handleDeleteSelected();
 	};
 
 	function handleCreate() {
-		var createModal = $('#create-modal');
-		var createTagName = $('#create-tag-name');
-		var createModalGo = $('#create-modal-go');
+		const createModal = $('#create-modal');
+		const createTagName = $('#create-tag-name');
+		const createModalGo = $('#create-modal-go');
 
 		createModal.on('keypress', function (e) {
 			if (e.keyCode === 13) {
@@ -41,7 +40,7 @@ define('admin/manage/tags', [
 				tag: createTagName.val(),
 			}, function (err) {
 				if (err) {
-					return app.alertError(err.message);
+					return alerts.error(err);
 				}
 
 				createTagName.val('');
@@ -54,90 +53,33 @@ define('admin/manage/tags', [
 	}
 
 	function handleSearch() {
-		$('#tag-search').on('input propertychange', function () {
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-				timeoutId = 0;
-			}
+		$('#tag-search').on('input propertychange', utils.debounce(function () {
+			socket.emit('topics.searchAndLoadTags', {
+				query: $('#tag-search').val(),
+			}, function (err, result) {
+				if (err) {
+					return alerts.error(err);
+				}
 
-			timeoutId = setTimeout(function () {
-				socket.emit('topics.searchAndLoadTags', {
-					query: $('#tag-search').val(),
-				}, function (err, result) {
-					if (err) {
-						return app.alertError(err.message);
-					}
-
-					app.parseAndTranslate('admin/manage/tags', 'tags', {
-						tags: result.tags,
-					}, function (html) {
-						$('.tag-list').html(html);
-						utils.makeNumbersHumanReadable(html.find('.human-readable-number'));
-						timeoutId = 0;
-
-						selectable.enable('.tag-management', '.tag-row');
-					});
+				app.parseAndTranslate('admin/manage/tags', 'tags', {
+					tags: result.tags,
+				}, function (html) {
+					$('.tag-list').html(html);
+					utils.makeNumbersHumanReadable(html.find('.human-readable-number'));
+					selectable.enable('.tag-management', '.tag-row');
 				});
-			}, 250);
-		});
-	}
-
-	function handleModify() {
-		$('#modify').on('click', function () {
-			var tagsToModify = $('.tag-row.ui-selected');
-			if (!tagsToModify.length) {
-				return;
-			}
-
-			var firstTag = $(tagsToModify[0]);
-			bootbox.dialog({
-				title: '[[admin/manage/tags:alerts.editing]]',
-				message: firstTag.find('.tag-modal').html(),
-				buttons: {
-					success: {
-						label: 'Save',
-						className: 'btn-primary save',
-						callback: function () {
-							var modal = $('.bootbox');
-							var resetColors = modal.find('#reset-colors').is(':checked');
-							var bgColor = resetColors ? '' : modal.find('[data-name="bgColor"]').val();
-							var color = resetColors ? '' : modal.find('[data-name="color"]').val();
-
-							var data = [];
-							tagsToModify.each(function (idx, tag) {
-								tag = $(tag);
-								data.push({
-									value: tag.attr('data-tag'),
-									color: color,
-									bgColor: bgColor,
-								});
-
-								tag.find('[data-name="bgColor"]').val(bgColor);
-								tag.find('[data-name="color"]').val(color);
-								tag.find('.tag-item').css('background-color', bgColor).css('color', color);
-							});
-
-							socket.emit('admin.tags.update', data, function (err) {
-								if (err) {
-									return app.alertError(err.message);
-								}
-								app.alertSuccess('[[admin/manage/tags:alerts.update-success]]');
-							});
-						},
-					},
-				},
 			});
-		});
+		}, 250));
 	}
 
 	function handleRename() {
 		$('#rename').on('click', function () {
-			var tagsToModify = $('.tag-row.ui-selected');
+			const tagsToModify = $('.tag-row.ui-selected');
 			if (!tagsToModify.length) {
 				return;
 			}
 
-			var modal = bootbox.dialog({
+			const modal = bootbox.dialog({
 				title: '[[admin/manage/tags:alerts.editing]]',
 				message: $('.rename-modal').html(),
 				buttons: {
@@ -145,7 +87,7 @@ define('admin/manage/tags', [
 						label: 'Save',
 						className: 'btn-primary save',
 						callback: function () {
-							var data = [];
+							const data = [];
 							tagsToModify.each(function (idx, tag) {
 								tag = $(tag);
 								data.push({
@@ -156,9 +98,9 @@ define('admin/manage/tags', [
 
 							socket.emit('admin.tags.rename', data, function (err) {
 								if (err) {
-									return app.alertError(err.message);
+									return alerts.error(err);
 								}
-								app.alertSuccess('[[admin/manage/tags:alerts.update-success]]');
+								alerts.success('[[admin/manage/tags:alerts.update-success]]');
 								ajaxify.refresh();
 							});
 						},
@@ -170,7 +112,7 @@ define('admin/manage/tags', [
 
 	function handleDeleteSelected() {
 		$('#deleteSelected').on('click', function () {
-			var tagsToDelete = $('.tag-row.ui-selected');
+			const tagsToDelete = $('.tag-row.ui-selected');
 			if (!tagsToDelete.length) {
 				return;
 			}
@@ -179,7 +121,7 @@ define('admin/manage/tags', [
 				if (!confirm) {
 					return;
 				}
-				var tags = [];
+				const tags = [];
 				tagsToDelete.each(function (index, el) {
 					tags.push($(el).attr('data-tag'));
 				});
@@ -187,7 +129,7 @@ define('admin/manage/tags', [
 					tags: tags,
 				}, function (err) {
 					if (err) {
-						return app.alertError(err.message);
+						return alerts.error(err);
 					}
 					tagsToDelete.remove();
 				});

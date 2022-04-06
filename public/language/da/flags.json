@@ -6,6 +6,7 @@
 	"assignee": "Assignee",
 	"update": "Update",
 	"updated": "Updated",
+	"resolved": "Resolved",
 	"target-purged": "The content this flag referred to has been purged and is no longer available.",
 
 	"graph-label": "Daily Flags",
@@ -26,6 +27,7 @@
 	"filter-cid-all": "All categories",
 	"apply-filters": "Apply Filters",
 	"more-filters": "More Filters",
+	"fewer-filters": "Fewer Filters",
 
 	"quick-actions": "Quick Actions",
 	"flagged-user": "Flagged User",
@@ -75,12 +77,10 @@
 	"modal-reason-custom": "Reason for reporting this content...",
 	"modal-submit": "Submit Report",
 	"modal-submit-success": "Content has been flagged for moderation.",
-	"modal-submit-confirm": "Confirm Submission",
-	"modal-submit-confirm-text": "You have a custom reason specified already. Are you sure you wish to submit via quick-report?",
-	"modal-submit-confirm-text-help": "Submitting a quick report will overwrite any custom reasons defined.",
 
 	"bulk-actions": "Bulk Actions",
 	"bulk-resolve": "Resolve Flag(s)",
 	"bulk-success": "%1 flags updated",
-	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)"
+	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)",
+  	"auto-flagged": "[Auto Flagged] Received %1 downvotes."
 }

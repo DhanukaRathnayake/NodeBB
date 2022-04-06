@@ -1,5 +1,10 @@
 {
-	"dashboard": "Kontrol Paneli",
+	"section-dashboard": "Yönetim Paneli",
+	"dashboard/overview": "Genel Bakış",
+	"dashboard/logins": "Girişler",
+	"dashboard/users": "Kullanıcılar",
+	"dashboard/topics": "Başlıklar",
+	"dashboard/searches": "Aramalar",
 	"section-general": "Genel",
 
 	"section-manage": "Yönet",

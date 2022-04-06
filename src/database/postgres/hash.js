@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = function (module) {
-	var helpers = require('./helpers');
+	const helpers = require('./helpers');
 
 	module.setObject = async function (key, data) {
 		if (!key || !data) {
@@ -11,10 +11,25 @@ module.exports = function (module) {
 		if (data.hasOwnProperty('')) {
 			delete data[''];
 		}
-
-		await module.transaction(async function (client) {
+		if (!Object.keys(data).length) {
+			return;
+		}
+		await module.transaction(async (client) => {
 			const dataString = JSON.stringify(data);
-			async function setOne(key) {
+
+			if (Array.isArray(key)) {
+				await helpers.ensureLegacyObjectsType(client, key, 'hash');
+				await client.query({
+					name: 'setObjectKeys',
+					text: `
+	INSERT INTO "legacy_hash" ("_key", "data")
+	SELECT k, $2::TEXT::JSONB
+	FROM UNNEST($1::TEXT[]) vs(k)
+	ON CONFLICT ("_key")
+	DO UPDATE SET "data" = "legacy_hash"."data" || $2::TEXT::JSONB`,
+					values: [key, dataString],
+				});
+			} else {
 				await helpers.ensureLegacyObjectType(client, key, 'hash');
 				await client.query({
 					name: 'setObject',
@@ -26,11 +41,43 @@ module.exports = function (module) {
 					values: [key, dataString],
 				});
 			}
-			if (Array.isArray(key)) {
-				await Promise.all(key.map(k => setOne(k)));
-			} else {
-				await setOne(key);
+		});
+	};
+
+	module.setObjectBulk = async function (...args) {
+		let data = args[0];
+		if (!Array.isArray(data) || !data.length) {
+			return;
+		}
+		if (Array.isArray(args[1])) {
+			console.warn('[deprecated] db.setObjectBulk(keys, data) usage is deprecated, please use db.setObjectBulk(data)');
+			// conver old format to new format for backwards compatibility
+			data = args[0].map((key, i) => [key, args[1][i]]);
+		}
+		await module.transaction(async (client) => {
+			data = data.filter((item) => {
+				if (item[1].hasOwnProperty('')) {
+					delete item[1][''];
+				}
+				return !!Object.keys(item[1]).length;
+			});
+			const keys = data.map(item => item[0]);
+			if (!keys.length) {
+				return;
 			}
+
+			await helpers.ensureLegacyObjectsType(client, keys, 'hash');
+			const dataStrings = data.map(item => JSON.stringify(item[1]));
+			await client.query({
+				name: 'setObjectBulk',
+				text: `
+			INSERT INTO "legacy_hash" ("_key", "data")
+			SELECT k, d
+			FROM UNNEST($1::TEXT[], $2::TEXT::JSONB[]) vs(k, d)
+			ON CONFLICT ("_key")
+			DO UPDATE SET "data" = "legacy_hash"."data" || EXCLUDED.data`,
+				values: [keys, dataStrings],
+			});
 		});
 	};
 
@@ -39,9 +86,11 @@ module.exports = function (module) {
 			return;
 		}
 
-		await module.transaction(async function (client) {
+		await module.transaction(async (client) => {
 			const valueString = JSON.stringify(value);
-			async function setOne(key) {
+			if (Array.isArray(key)) {
+				await module.setObject(key, { [field]: value });
+			} else {
 				await helpers.ensureLegacyObjectType(client, key, 'hash');
 				await client.query({
 					name: 'setObjectField',
@@ -53,20 +102,16 @@ module.exports = function (module) {
 					values: [key, field, valueString],
 				});
 			}
-
-			if (Array.isArray(key)) {
-				await Promise.all(key.map(k => setOne(k)));
-			} else {
-				await setOne(key);
-			}
 		});
 	};
 
-	module.getObject = async function (key) {
+	module.getObject = async function (key, fields = []) {
 		if (!key) {
 			return null;
 		}
-
+		if (fields.length) {
+			return await module.getObjectFields(key, fields);
+		}
 		const res = await module.pool.query({
 			name: 'getObject',
 			text: `
@@ -83,11 +128,13 @@ SELECT h."data"
 		return res.rows.length ? res.rows[0].data : null;
 	};
 
-	module.getObjects = async function (keys) {
+	module.getObjects = async function (keys, fields = []) {
 		if (!Array.isArray(keys) || !keys.length) {
 			return [];
 		}
-
+		if (fields.length) {
+			return await module.getObjectsFields(keys, fields);
+		}
 		const res = await module.pool.query({
 			name: 'getObjects',
 			text: `
@@ -130,7 +177,9 @@ SELECT h."data"->>$2::TEXT f
 		if (!key) {
 			return null;
 		}
-
+		if (!Array.isArray(fields) || !fields.length) {
+			return await module.getObject(key);
+		}
 		const res = await module.pool.query({
 			name: 'getObjectFields',
 			text: `
@@ -150,8 +199,8 @@ SELECT (SELECT jsonb_object_agg(f, d."value")
 			return res.rows[0].d;
 		}
 
-		var obj = {};
-		fields.forEach(function (f) {
+		const obj = {};
+		fields.forEach((f) => {
 			obj[f] = null;
 		});
 
@@ -163,6 +212,9 @@ SELECT (SELECT jsonb_object_agg(f, d."value")
 			return [];
 		}
 
+		if (!Array.isArray(fields) || !fields.length) {
+			return await module.getObjects(keys);
+		}
 		const res = await module.pool.query({
 			name: 'getObjectsFields',
 			text: `
@@ -250,7 +302,19 @@ SELECT (h."data" ? $2::TEXT AND h."data"->>$2::TEXT IS NOT NULL) b
 		if (!key || (Array.isArray(key) && !key.length) || !Array.isArray(fields) || !fields.length) {
 			return;
 		}
-		async function delKey(key, fields) {
+
+		if (Array.isArray(key)) {
+			await module.pool.query({
+				name: 'deleteObjectFieldsKeys',
+				text: `
+	UPDATE "legacy_hash"
+	   SET "data" = COALESCE((SELECT jsonb_object_agg("key", "value")
+								FROM jsonb_each("data")
+							   WHERE "key" <> ALL ($2::TEXT[])), '{}')
+	 WHERE "_key" = ANY($1::TEXT[])`,
+				values: [key, fields],
+			});
+		} else {
 			await module.pool.query({
 				name: 'deleteObjectFields',
 				text: `
@@ -261,11 +325,6 @@ SELECT (h."data" ? $2::TEXT AND h."data"->>$2::TEXT IS NOT NULL) b
 	 WHERE "_key" = $1::TEXT`,
 				values: [key, fields],
 			});
-		}
-		if (Array.isArray(key)) {
-			await Promise.all(key.map(k => delKey(k, fields)));
-		} else {
-			await delKey(key, fields);
 		}
 	};
 
@@ -284,7 +343,7 @@ SELECT (h."data" ? $2::TEXT AND h."data"->>$2::TEXT IS NOT NULL) b
 			return null;
 		}
 
-		return await module.transaction(async function (client) {
+		return await module.transaction(async (client) => {
 			if (Array.isArray(key)) {
 				await helpers.ensureLegacyObjectsType(client, key, 'hash');
 			} else {

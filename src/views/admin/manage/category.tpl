@@ -19,7 +19,7 @@
 					<label for="cid-{category.cid}-description">
 						[[admin/manage/categories:description]]
 					</label>
-					<input id="cid-{category.cid}-description" data-name="description" placeholder="[[admin/manage/categories:description]]" value="{category.description}" class="form-control category_description description" /><br />
+					<textarea id="cid-{category.cid}-description" data-name="description" placeholder="[[admin/manage/categories:description]]" class="form-control category_description description" />{category.description}</textarea><br />
 				</fieldset>
 
 				<fieldset class="row">
@@ -39,6 +39,7 @@
 							<input type="color" id="cid-{category.cid}-color" placeholder="#ffffff" data-name="color" value="{category.color}" class="form-control category_color" />
 						</div>
 					</div>
+
 					<div class="col-sm-4 col-xs-12">
 						<div class="form-group">
 							<label for="cid-{category.cid}-imageClass">
@@ -82,7 +83,15 @@
 					</div>
 				</fieldset>
 				<fieldset class="row">
-					<div class="col-sm-6 col-xs-12">
+					<div class="col-sm-4 col-xs-12">
+						<div class="form-group">
+							<label for="cid-subcategories-per-page">
+								[[admin/manage/categories:subcategories-per-page]]
+							</label>
+							<input id="cid-subcategories-per-page" type="text" class="form-control" data-name="subCategoriesPerPage" value="{category.subCategoriesPerPage}" />
+						</div>
+					</div>
+					<div class="col-sm-4 col-xs-12">
 						<div class="form-group">
 							<label for="cid-min-tags">
 								[[admin/settings/tags:min-per-topic]]
@@ -90,7 +99,7 @@
 							<input id="cid-min-tags" type="text" class="form-control" data-name="minTags" value="{category.minTags}" />
 						</div>
 					</div>
-					<div class="col-sm-6 col-xs-12">
+					<div class="col-sm-4 col-xs-12">
 						<div class="form-group">
 							<label for="cid-max-tags">
 								[[admin/settings/tags:max-per-topic]]

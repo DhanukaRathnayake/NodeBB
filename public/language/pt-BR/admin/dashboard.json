@@ -2,7 +2,8 @@
 	"forum-traffic": "Tráfego do Forum",
 	"page-views": "Visualizações de Página",
 	"unique-visitors": "Visitantes Únicos",
-	"new-users": "New Users",
+	"logins": "Logins",
+	"new-users": "Novos Usuários",
 	"posts": "Posts",
 	"topics": "Tópicos",
 	"page-views-seven": "Últimos 7 Dias",
@@ -14,12 +15,12 @@
 	"page-views-custom-help": "Entre com um intervalo de data de visualizações de página que gostaria de ver. Se nenhum selecionador de data estiver disponível, o formato aceito é  <code>AAAA-MM-DD</code>",
 	"page-views-custom-error": "Por favor, entre com um intervalo de data válido no formato <code>AAAA-MM-DD</code>",
 
-	"stats.yesterday": "Yesterday",
-	"stats.today": "Today",
-	"stats.last-week": "Last Week",
-	"stats.this-week": "This Week",
-	"stats.last-month": "Last Month",
-	"stats.this-month": "This Month",
+	"stats.yesterday": "Ontem",
+	"stats.today": "Hoje",
+	"stats.last-week": "Semana Passada",
+	"stats.this-week": "Esta Semana",
+	"stats.last-month": "Mês Passado",
+	"stats.this-month": "Este Mês",
 	"stats.all": "Todos os Tempos",
 
 	"updates": "Atualizações",
@@ -29,6 +30,7 @@
 	"upgrade-available": "<p>Uma nova versão (v%1) foi lançada. Considere <a href=\"https://docs.nodebb.org/configuring/upgrade/\" target=\"_blank\">atualizar o seu NodeBB</a>.</p>",
 	"prerelease-upgrade-available": "<p>Esta é uma versão de pré-lançamento desatualizada do NodeBB. Uma nova versão (v%1) foi lançada. Considere <a href=\"https://docs.nodebb.org/configuring/upgrade/\" target=\"_blank\">atualizar o seu NodeBB</a>.</p>",
 	"prerelease-warning": "<p>Esta é uma versão de <strong>pré-lançamento</strong> do NodeBB. Bugs inesperados podem ocorrer. <i class=\"fa fa-exclamation-triangle\"></i></p>",
+	"fallback-emailer-not-found": "Emailer substituto não encontrado!",
 	"running-in-development": "<span>O fórum está sendo executado em modo de desenvolvedor. O fórum pode estar sujeito a potenciais vulnerabilidades; por favor, entre em contato com o seu administrador de sistemas.</span>",
 	"latest-lookup-failed": "<p>Falha ao procurar a versão mais recente disponível do NodeBB</p>",
 
@@ -54,8 +56,8 @@
 	"active-users.total": "Total",
 	"active-users.connections": "Conexões",
 
-	"anonymous-registered-users": "Anônimos vs Usuários Registrados",
-	"anonymous": "Anônimo",
+	"guest-registered-users": "Guest vs Registered Users",
+	"guest": "Guest",
 	"registered": "Registrado",
 
 	"user-presence": "Presença de Usuário",
@@ -66,6 +68,7 @@
 	"unread": "Não-lidos",
 
 	"high-presence-topics": "Tópicos de Alta Participação",
+	"popular-searches": "Popular Searches",
 
 	"graphs.page-views": "Páginas Visualizadas",
 	"graphs.page-views-registered": "Páginas Visualizadas por Registrados",
@@ -73,7 +76,15 @@
 	"graphs.page-views-bot": "Páginas Visualizadas por Bot",
 	"graphs.unique-visitors": "Visitantes Únicos",
 	"graphs.registered-users": "Usuários Registrados",
-	"graphs.anonymous-users": "Usuários Anônimos",
+	"graphs.guest-users": "Guest Users",
 	"last-restarted-by": "Última vez reiniciado por",
-	"no-users-browsing": "Nenhum usuário navegando"
+	"no-users-browsing": "Nenhum usuário navegando",
+
+	"back-to-dashboard": "De volta ao Painel",
+	"details.no-users": "Nenhum usuário ingressou dentro do período de tempo selecionado",
+	"details.no-topics": "Nenhum tópico foi postado dentro do período de tempo selecionado",
+	"details.no-searches": "No searches have been made yet",
+	"details.no-logins": "Nenhum login foi registrado dentro do período de tempo selecionado",
+	"details.logins-static": "O NodeBB só salva os dados da sessão por %1 dias, então esta tabela abaixo mostrará apenas as sessões ativas mais recentemente",
+	"details.logins-login-time": "Hora de Login"
 }

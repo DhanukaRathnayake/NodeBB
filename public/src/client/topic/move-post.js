@@ -4,11 +4,11 @@
 define('forum/topic/move-post', [
 	'components', 'postSelect', 'translator', 'alerts', 'api',
 ], function (components, postSelect, translator, alerts, api) {
-	var MovePost = {};
+	const MovePost = {};
 
-	var moveModal;
-	var moveCommit;
-	var fromTid;
+	let moveModal;
+	let moveCommit;
+	let fromTid;
 
 	MovePost.init = function (postEl) {
 		if (moveModal) {
@@ -23,6 +23,7 @@ define('forum/topic/move-post', [
 			$('body').append(moveModal);
 
 			moveModal.find('.close,#move_posts_cancel').on('click', closeMoveModal);
+			moveModal.find('#topicId').on('keyup', utils.debounce(checkMoveButtonEnable, 200));
 			postSelect.init(onPostToggled);
 			showPostsSelected();
 
@@ -30,45 +31,84 @@ define('forum/topic/move-post', [
 				postSelect.togglePostSelection(postEl, postEl.attr('data-pid'));
 			}
 
-			$(window).off('action:ajaxify.end', checkMoveButtonEnable)
-				.on('action:ajaxify.end', checkMoveButtonEnable);
+			$(window).off('action:ajaxify.end', onAjaxifyEnd)
+				.on('action:ajaxify.end', onAjaxifyEnd);
 
 			moveCommit.on('click', function () {
-				if (!ajaxify.data.template.topic || !ajaxify.data.tid) {
+				const targetTid = getTargetTid();
+				if (!targetTid) {
 					return;
 				}
 				moveCommit.attr('disabled', true);
-				var data = {
+				const data = {
 					pids: postSelect.pids.slice(),
-					tid: ajaxify.data.tid,
+					tid: targetTid,
 				};
-				alerts.alert({
-					alert_id: 'pids_move_' + postSelect.pids.join('-'),
-					title: '[[topic:thread_tools.move-posts]]',
-					message: '[[topic:topic_move_posts_success]]',
-					type: 'success',
-					timeout: 10000,
-					timeoutfn: function () {
-						movePosts(data);
-					},
-					clickfn: function (alert, params) {
-						delete params.timeoutfn;
-						app.alertSuccess('[[topic:topic_move_posts_undone]]');
-						moveCommit.removeAttr('disabled');
-					},
-				});
+				if (config.undoTimeout > 0) {
+					return alerts.alert({
+						alert_id: 'pids_move_' + postSelect.pids.join('-'),
+						title: '[[topic:thread_tools.move-posts]]',
+						message: '[[topic:topic_move_posts_success]]',
+						type: 'success',
+						timeout: 10000,
+						timeoutfn: function () {
+							movePosts(data);
+						},
+						clickfn: function (alert, params) {
+							delete params.timeoutfn;
+							alerts.success('[[topic:topic_move_posts_undone]]');
+							moveCommit.removeAttr('disabled');
+						},
+					});
+				}
+
+				movePosts(data);
 			});
 		});
 	};
+
+	function onAjaxifyEnd() {
+		if (!moveModal) {
+			return;
+		}
+		const tidInput = moveModal.find('#topicId');
+		let targetTid = null;
+		if (ajaxify.data.template.topic && ajaxify.data.tid &&
+			parseInt(ajaxify.data.tid, 10) !== fromTid
+		) {
+			targetTid = ajaxify.data.tid;
+		}
+		if (targetTid && !tidInput.val()) {
+			tidInput.val(targetTid);
+		}
+		checkMoveButtonEnable();
+	}
+
+	function getTargetTid() {
+		const tidInput = moveModal.find('#topicId');
+		if (tidInput.length && tidInput.val()) {
+			return tidInput.val();
+		}
+		return ajaxify.data.template.topic && ajaxify.data.tid;
+	}
 
 	function showPostsSelected() {
 		if (!moveModal) {
 			return;
 		}
+		const targetTid = getTargetTid();
 		if (postSelect.pids.length) {
-			if (ajaxify.data.template.topic && ajaxify.data.tid && ajaxify.data.tid !== fromTid) {
-				var translateStr = translator.compile('topic:x-posts-will-be-moved-to-y', postSelect.pids.length, ajaxify.data.title);
-				moveModal.find('#pids').translateHtml(translateStr);
+			if (targetTid && parseInt(targetTid, 10) !== parseInt(fromTid, 10)) {
+				api.get('/topics/' + targetTid, {}).then(function (data) {
+					if (!data || !data.tid) {
+						return alerts.error('[[error:no-topic]]');
+					}
+					if (data.scheduled) {
+						return alerts.error('[[error:cant-move-posts-to-scheduled]]');
+					}
+					const translateStr = translator.compile('topic:x-posts-will-be-moved-to-y', postSelect.pids.length, data.title);
+					moveModal.find('#pids').translateHtml(translateStr);
+				});
 			} else {
 				moveModal.find('#pids').translateHtml('[[topic:x-posts-selected, ' + postSelect.pids.length + ']]');
 			}
@@ -81,9 +121,9 @@ define('forum/topic/move-post', [
 		if (!moveModal) {
 			return;
 		}
-
-		if (postSelect.pids.length && ajaxify.data.tid &&
-			ajaxify.data.template.topic && ajaxify.data.tid !== fromTid
+		const targetTid = getTargetTid();
+		if (postSelect.pids.length && targetTid &&
+			parseInt(targetTid, 10) !== parseInt(fromTid, 10)
 		) {
 			moveCommit.removeAttr('disabled');
 		} else {
@@ -97,7 +137,7 @@ define('forum/topic/move-post', [
 	}
 
 	function movePosts(data) {
-		if (!ajaxify.data.template.topic || !data.tid) {
+		if (!data.tid) {
 			return;
 		}
 
@@ -111,7 +151,7 @@ define('forum/topic/move-post', [
 			});
 
 			closeMoveModal();
-		}).catch(app.alertError);
+		}).catch(alerts.error);
 	}
 
 	function closeMoveModal() {
@@ -119,6 +159,7 @@ define('forum/topic/move-post', [
 			moveModal.remove();
 			moveModal = null;
 			postSelect.disable();
+			$(window).off('action:ajaxify.end', onAjaxifyEnd);
 		}
 	}
 

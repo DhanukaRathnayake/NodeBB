@@ -1,5 +1,10 @@
 {
-	"dashboard": "לוח מחוונים",
+	"section-dashboard": "לוח מחוונים",
+	"dashboard/overview": "סקירה כללית",
+	"dashboard/logins": "כניסות",
+	"dashboard/users": "משתמשים",
+	"dashboard/topics": "נושאים",
+	"dashboard/searches": "חיפושים",
 	"section-general": "כללי",
 
 	"section-manage": "ניהול",

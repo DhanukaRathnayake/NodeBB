@@ -15,7 +15,11 @@ info:
     Years prior to this determination, many users of NodeBB had asked for a RESTful API to call against NodeBB, which led to the creation of [`nodebb-plugin-write-api`](https://github.com/NodeBB/nodebb-plugin-write-api). In tandem with the above decision, the Write API was merged into NodeBB core in late 2020.
 
     v3 of the Write API (this document) achieves rough feature parity with v2 of the Write API plugin.
-  version: 1.15.0
+
+    # Authentication
+
+    Please see the ["Authentication" section under the Read API](../read/#section/Overview/Authentication) for more information on how to authenticate against this API in order to make calls.
+  version: 1.19.0
   contact:
     email: support@nodebb.org
   license:
@@ -35,6 +39,8 @@ tags:
     description: Topic-based calls (create, modify, delete, etc.)
   - name: posts
     description: Individual post-related calls (create, modify, delete, etc.)
+  - name: chats
+    description: Calls related to the user private messaging system
   - name: admin
     description: Administrative calls
   - name: files
@@ -48,6 +54,8 @@ paths:
     $ref: 'write/users.yaml'
   /users/{uid}:
     $ref: 'write/users/uid.yaml'
+  /users/{uid}/picture:
+    $ref: 'write/users/uid/picture.yaml'
   /users/{uid}/content:
     $ref: 'write/users/uid/content.yaml'
   /users/{uid}/account:
@@ -60,6 +68,8 @@ paths:
     $ref: 'write/users/uid/follow.yaml'
   /users/{uid}/ban:
     $ref: 'write/users/uid/ban.yaml'
+  /users/{uid}/mute:
+    $ref: 'write/users/uid/mute.yaml'
   /users/{uid}/tokens:
     $ref: 'write/users/uid/tokens.yaml'
   /users/{uid}/tokens/{token}:
@@ -70,6 +80,12 @@ paths:
     $ref: 'write/users/uid/invites.yaml'
   /users/{uid}/invites/groups:
     $ref: 'write/users/uid/invites/groups.yaml'
+  /users/{uid}/emails:
+    $ref: 'write/users/uid/emails.yaml'
+  /users/{uid}/emails/{email}:
+    $ref: 'write/users/uid/emails/email.yaml'
+  /users/{uid}/emails/{email}/confirm:
+    $ref: 'write/users/uid/emails/email/confirm.yaml'
   /groups/:
     $ref: 'write/groups.yaml'
   /groups/{slug}:
@@ -82,6 +98,12 @@ paths:
     $ref: 'write/categories.yaml'
   /categories/{cid}:
     $ref: 'write/categories/cid.yaml'
+  /categories/{cid}/privileges:
+    $ref: 'write/categories/cid/privileges.yaml'
+  /categories/{cid}/privileges/{privilege}:
+    $ref: 'write/categories/cid/privileges/privilege.yaml'
+  /categories/{cid}/moderator/{uid}:
+    $ref: 'write/categories/cid/moderator/uid.yaml'
   /topics/:
     $ref: 'write/topics.yaml'
   /topics/{tid}:
@@ -100,6 +122,12 @@ paths:
     $ref: 'write/topics/tid/tags.yaml'
   /topics/{tid}/thumbs:
     $ref: 'write/topics/tid/thumbs.yaml'
+  /topics/{tid}/thumbs/order:
+    $ref: 'write/topics/tid/thumbs/order.yaml'
+  /topics/{tid}/events:
+    $ref: 'write/topics/tid/events.yaml'
+  /topics/{tid}/events/{eventId}:
+    $ref: 'write/topics/tid/events/eventId.yaml'
   /posts/{pid}:
     $ref: 'write/posts/pid.yaml'
   /posts/{pid}/state:
@@ -114,7 +142,35 @@ paths:
     $ref: 'write/posts/pid/diffs.yaml'
   /posts/{pid}/diffs/{since}:
     $ref: 'write/posts/pid/diffs/since.yaml'
+  /posts/{pid}/diffs/{timestamp}:
+    $ref: 'write/posts/pid/diffs/timestamp.yaml'
+  /chats/:
+    $ref: 'write/chats.yaml'
+  /chats/{roomId}:
+    $ref: 'write/chats/roomId.yaml'
+  /chats/{roomId}/users:
+    $ref: 'write/chats/roomId/users.yaml'
+  /chats/{roomId}/users/{uid}:
+    $ref: 'write/chats/roomId/users/uid.yaml'
+  /chats/{roomId}/messages:
+    $ref: 'write/chats/roomId/messages.yaml'
+  /chats/{roomId}/messages/{mid}:
+    $ref: 'write/chats/roomId/messages/mid.yaml'
+  /flags/:
+    $ref: 'write/flags.yaml'
+  /flags/{flagId}:
+    $ref: 'write/flags/flagId.yaml'
+  /flags/{flagId}/notes:
+    $ref: 'write/flags/flagId/notes.yaml'
+  /flags/{flagId}/notes/{datetime}:
+    $ref: 'write/flags/flagId/notes/datetime.yaml'
   /admin/settings/{setting}:
     $ref: 'write/admin/settings/setting.yaml'
+  /admin/analytics:
+    $ref: 'write/admin/analytics.yaml'
+  /admin/analytics/{set}:
+    $ref: 'write/admin/analytics/set.yaml'
   /files/:
     $ref: 'write/files.yaml'
+  /files/folder:
+    $ref: 'write/files/folder.yaml'

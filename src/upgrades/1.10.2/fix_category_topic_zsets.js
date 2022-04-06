@@ -1,39 +1,30 @@
+/* eslint-disable no-await-in-loop */
+
 'use strict';
 
-var async = require('async');
-var db = require('../../database');
+const db = require('../../database');
 
-var batch = require('../../batch');
+const batch = require('../../batch');
 
 module.exports = {
 	name: 'Fix category topic zsets',
 	timestamp: Date.UTC(2018, 9, 11),
-	method: function (callback) {
-		const progress = this.progress;
+	method: async function () {
+		const { progress } = this;
 
-		var topics = require('../../topics');
-		batch.processSortedSet('topics:tid', function (tids, next) {
-			async.eachSeries(tids, function (tid, next) {
+		const topics = require('../../topics');
+		await batch.processSortedSet('topics:tid', async (tids) => {
+			for (const tid of tids) {
 				progress.incr();
-
-				async.waterfall([
-					function (next) {
-						db.getObjectFields('topic:' + tid, ['cid', 'pinned', 'postcount'], next);
-					},
-					function (topicData, next) {
-						if (parseInt(topicData.pinned, 10) === 1) {
-							return setImmediate(next);
-						}
-						topicData.postcount = parseInt(topicData.postcount, 10) || 0;
-						db.sortedSetAdd('cid:' + topicData.cid + ':tids:posts', topicData.postcount, tid, next);
-					},
-					function (next) {
-						topics.updateLastPostTimeFromLastPid(tid, next);
-					},
-				], next);
-			}, next);
+				const topicData = await db.getObjectFields(`topic:${tid}`, ['cid', 'pinned', 'postcount']);
+				if (parseInt(topicData.pinned, 10) !== 1) {
+					topicData.postcount = parseInt(topicData.postcount, 10) || 0;
+					await db.sortedSetAdd(`cid:${topicData.cid}:tids:posts`, topicData.postcount, tid);
+				}
+				await topics.updateLastPostTimeFromLastPid(tid);
+			}
 		}, {
 			progress: progress,
-		}, callback);
+		});
 	},
 };

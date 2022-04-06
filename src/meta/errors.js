@@ -11,9 +11,9 @@ const Errors = module.exports;
 
 let counters = {};
 
-new cronJob('0 * * * * *', function () {
+new cronJob('0 * * * * *', (() => {
 	Errors.writeData();
-}, null, true);
+}), null, true);
 
 Errors.writeData = async function () {
 	try {
@@ -37,7 +37,7 @@ Errors.log404 = function (route) {
 	if (!route) {
 		return;
 	}
-	route = route.slice(0, 512).replace(/\/$/, '');	// remove trailing slashes
+	route = route.slice(0, 512).replace(/\/$/, ''); // remove trailing slashes
 	analytics.increment('errors:404');
 	counters[route] = counters[route] || 0;
 	counters[route] += 1;
@@ -45,7 +45,7 @@ Errors.log404 = function (route) {
 
 Errors.get = async function (escape) {
 	const data = await db.getSortedSetRevRangeWithScores('errors:404', 0, 199);
-	data.forEach(function (nfObject) {
+	data.forEach((nfObject) => {
 		nfObject.value = escape ? validator.escape(String(nfObject.value || '')) : nfObject.value;
 	});
 	return data;

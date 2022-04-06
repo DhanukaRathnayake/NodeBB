@@ -1,22 +1,24 @@
 'use strict';
 
 module.exports = function (module) {
-	var helpers = require('./helpers');
+	const helpers = require('./helpers');
 
 	module.listPrepend = async function (key, value) {
 		if (!key) {
 			return;
 		}
 
-		await module.transaction(async function (client) {
+		await module.transaction(async (client) => {
 			await helpers.ensureLegacyObjectType(client, key, 'list');
+			value = Array.isArray(value) ? value : [value];
+			value.reverse();
 			await client.query({
-				name: 'listPrepend',
+				name: 'listPrependValues',
 				text: `
 INSERT INTO "legacy_list" ("_key", "array")
-VALUES ($1::TEXT, ARRAY[$2::TEXT])
+VALUES ($1::TEXT, $2::TEXT[])
 ON CONFLICT ("_key")
-DO UPDATE SET "array" = ARRAY[$2::TEXT] || "legacy_list"."array"`,
+DO UPDATE SET "array" = EXCLUDED.array || "legacy_list"."array"`,
 				values: [key, value],
 			});
 		});
@@ -26,16 +28,17 @@ DO UPDATE SET "array" = ARRAY[$2::TEXT] || "legacy_list"."array"`,
 		if (!key) {
 			return;
 		}
+		await module.transaction(async (client) => {
+			value = Array.isArray(value) ? value : [value];
 
-		await module.transaction(async function (client) {
 			await helpers.ensureLegacyObjectType(client, key, 'list');
 			await client.query({
 				name: 'listAppend',
 				text: `
 INSERT INTO "legacy_list" ("_key", "array")
-VALUES ($1::TEXT, ARRAY[$2::TEXT])
+VALUES ($1::TEXT, $2::TEXT[])
 ON CONFLICT ("_key")
-DO UPDATE SET "array" = "legacy_list"."array" || ARRAY[$2::TEXT]`,
+DO UPDATE SET "array" = "legacy_list"."array" || EXCLUDED.array`,
 				values: [key, value],
 			});
 		});
@@ -72,7 +75,11 @@ RETURNING A."array"[array_length(A."array", 1)] v`,
 		if (!key) {
 			return;
 		}
-
+		// TODO: remove all values with one query
+		if (Array.isArray(value)) {
+			await Promise.all(value.map(v => module.listRemoveAll(key, v)));
+			return;
+		}
 		await module.pool.query({
 			name: 'listRemoveAll',
 			text: `

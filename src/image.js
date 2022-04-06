@@ -46,14 +46,31 @@ image.resizeImage = async function (data) {
 		const buffer = await fs.promises.readFile(data.path);
 		const sharpImage = sharp(buffer, {
 			failOnError: true,
+			animated: data.path.endsWith('gif'),
 		});
 		const metadata = await sharpImage.metadata();
 
 		sharpImage.rotate(); // auto-orients based on exif data
 		sharpImage.resize(data.hasOwnProperty('width') ? data.width : null, data.hasOwnProperty('height') ? data.height : null);
 
-		if (data.quality && metadata.format === 'jpeg') {
-			sharpImage.jpeg({ quality: data.quality });
+		if (data.quality) {
+			switch (metadata.format) {
+				case 'jpeg': {
+					sharpImage.jpeg({
+						quality: data.quality,
+						mozjpeg: true,
+					});
+					break;
+				}
+
+				case 'png': {
+					sharpImage.png({
+						quality: data.quality,
+						compressionLevel: 9,
+					});
+					break;
+				}
+			}
 		}
 
 		await sharpImage.toFile(data.target || data.path);
@@ -67,9 +84,9 @@ image.normalise = async function (path) {
 		});
 	} else {
 		const sharp = requireSharp();
-		await sharp(path, { failOnError: true }).png().toFile(path + '.png');
+		await sharp(path, { failOnError: true }).png().toFile(`${path}.png`);
 	}
-	return path + '.png';
+	return `${path}.png`;
 };
 
 image.size = async function (path) {

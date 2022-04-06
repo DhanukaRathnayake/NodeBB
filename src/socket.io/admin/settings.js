@@ -2,10 +2,11 @@
 
 const meta = require('../../meta');
 const events = require('../../events');
+
 const Settings = module.exports;
 
-Settings.get = function (socket, data, callback) {
-	meta.settings.get(data.hash, callback);
+Settings.get = async function (socket, data) {
+	return await meta.settings.get(data.hash);
 };
 
 Settings.set = async function (socket, data) {
@@ -18,7 +19,6 @@ Settings.set = async function (socket, data) {
 	await events.log(eventData);
 };
 
-Settings.clearSitemapCache = function (socket, data, callback) {
+Settings.clearSitemapCache = async function () {
 	require('../../sitemap').clearCache();
-	callback();
 };

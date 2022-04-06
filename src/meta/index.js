@@ -27,6 +27,9 @@ Meta.languages = require('./languages');
 
 /* Assorted */
 Meta.userOrGroupExists = async function (slug) {
+	if (!slug) {
+		throw new Error('[[error:invalid-data]]');
+	}
 	const user = require('../user');
 	const groups = require('../groups');
 	slug = slugify(slug);
@@ -38,7 +41,7 @@ Meta.userOrGroupExists = async function (slug) {
 };
 
 if (nconf.get('isPrimary')) {
-	pubsub.on('meta:restart', function (data) {
+	pubsub.on('meta:restart', (data) => {
 		if (data.hostname !== os.hostname()) {
 			restart();
 		}
@@ -61,9 +64,9 @@ function restart() {
 }
 
 Meta.getSessionTTLSeconds = function () {
-	var ttlDays = 60 * 60 * 24 * Meta.config.loginDays;
-	var ttlSeconds = Meta.config.loginSeconds;
-	var ttl = ttlSeconds || ttlDays || 1209600; // Default to 14 days
+	const ttlDays = 60 * 60 * 24 * Meta.config.loginDays;
+	const ttlSeconds = Meta.config.loginSeconds;
+	const ttl = ttlSeconds || ttlDays || 1209600; // Default to 14 days
 	return ttl;
 };
 

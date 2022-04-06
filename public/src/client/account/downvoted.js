@@ -2,14 +2,14 @@
 
 
 define('forum/account/downvoted', ['forum/account/header', 'forum/account/posts'], function (header, posts) {
-	var Downvoted = {};
+	const Downvoted = {};
 
 	Downvoted.init = function () {
 		header.init();
 
 		$('[component="post/content"] img:not(.not-responsive)').addClass('img-responsive');
 
-		posts.handleInfiniteScroll('posts.loadMoreDownVotedPosts', 'account/downvoted');
+		posts.handleInfiniteScroll('account/downvoted');
 	};
 
 	return Downvoted;

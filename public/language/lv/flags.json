@@ -6,6 +6,7 @@
 	"assignee": "Piešķirtais",
 	"update": "Atjaunot",
 	"updated": "Atjaunots",
+	"resolved": "Resolved",
 	"target-purged": "Saturs, uz kā attiecas atzīme, ir iztīrīts un vairs nav pieejams.",
 
 	"graph-label": "Daily Flags",
@@ -26,6 +27,7 @@
 	"filter-cid-all": "Visas kategorijas",
 	"apply-filters": "Iespējot filtrus",
 	"more-filters": "More Filters",
+	"fewer-filters": "Fewer Filters",
 
 	"quick-actions": "Quick Actions",
 	"flagged-user": "Atzīmētais lietotājs",
@@ -75,12 +77,10 @@
 	"modal-reason-custom": "Iemesls, kāpēc ziņots par saturu...",
 	"modal-submit": "Iesniegt ziņojumu",
 	"modal-submit-success": "Saturs ir atzīmēts moderēšanai.",
-	"modal-submit-confirm": "Apstiprināt iesniegšanu",
-	"modal-submit-confirm-text": "Pielāgots iemesls jau ir atzīmēts. Vai tiešām vēlies iesniegt ātro ziņojumu?",
-	"modal-submit-confirm-text-help": "Iesniedzot ātro ziņojumu, tiks pārrakstīti visi pielāgoti iemesli.",
 
 	"bulk-actions": "Bulk Actions",
 	"bulk-resolve": "Resolve Flag(s)",
 	"bulk-success": "%1 flags updated",
-	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)"
+	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)",
+  	"auto-flagged": "[Auto Flagged] Received %1 downvotes."
 }

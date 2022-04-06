@@ -2,6 +2,7 @@
 	"forum-traffic": "Ruch na forum",
 	"page-views": "Wyświetlenia strony",
 	"unique-visitors": "Unikalni goście",
+	"logins": "Loginy",
 	"new-users": "Nowi użytkownicy",
 	"posts": "Posty",
 	"topics": "Tematy",
@@ -29,6 +30,7 @@
 	"upgrade-available": "<p>Została wydana nowa wersja (v%1). Rozważ <a href=\"https://docs.nodebb.org/configuring/upgrade/\" target=\"_blank\">aktualizację NodeBB</a>.</p>",
 	"prerelease-upgrade-available": "<p>To jest nieaktualna przedpremierowa wersja NodeBB. Została wydana nowa wersja (v%1). Rozważ <a href=\"https://docs.nodebb.org/configuring/upgrade/\" target=\"_blank\">aktualizację NodeBB</a>.</p>",
 	"prerelease-warning": "<p>To jest <strong>przedpremierowa</strong> wersja NodeBB. Mogą występować błędy. <i class=\"fa fa-exclamation-triangle\"></i></p>",
+	"fallback-emailer-not-found": "Nie znaleziono kopii maila!",
 	"running-in-development": "<span>Forum działa w trybie programistycznym i może być podatne na zagrożenia. Skontaktuj się z administratorem.</span>",
 	"latest-lookup-failed": "<p>Nie udało się odnaleźć najnowszej wersji NodeBB</p>",
 
@@ -54,8 +56,8 @@
 	"active-users.total": "Łącznie",
 	"active-users.connections": "Połączenia",
 
-	"anonymous-registered-users": "Użytkownicy anonimowi vs zarejestrowani",
-	"anonymous": "Anonimowi",
+	"guest-registered-users": "Guest vs Registered Users",
+	"guest": "Guest",
 	"registered": "Zarejestrowani",
 
 	"user-presence": "Obecność użytkownika",
@@ -66,6 +68,7 @@
 	"unread": "Nieprzeczytane",
 
 	"high-presence-topics": "Popularne tematy",
+	"popular-searches": "Popular Searches",
 
 	"graphs.page-views": "Wyświetlenia strony",
 	"graphs.page-views-registered": "Wyświetlenia użytkowników",
@@ -73,7 +76,15 @@
 	"graphs.page-views-bot": "Wyświetlenia botów",
 	"graphs.unique-visitors": "Unikalni użytkownicy",
 	"graphs.registered-users": "Zarejestrowani użytkownicy",
-	"graphs.anonymous-users": "Anonimowi użytkownicy",
+	"graphs.guest-users": "Guest Users",
 	"last-restarted-by": "Ostatnio restartowany przez",
-	"no-users-browsing": "Brak przeglądających"
+	"no-users-browsing": "Brak przeglądających",
+
+	"back-to-dashboard": "Powrót do Dashboardu",
+	"details.no-users": "Żaden użytkownik nie dołączył w wybranym okresie",
+	"details.no-topics": "Żadne tematy nie zostały opublikowane w wybranym okresie",
+	"details.no-searches": "No searches have been made yet",
+	"details.no-logins": "Żadne logi nie zostały zapisane w wybranym okresie",
+	"details.logins-static": "NodeBB zapisuje dane sesji tylko na %1 dzień, dlatego tabela poniżej zawierać będzie tylko ostatnią aktywną sesję",
+	"details.logins-login-time": "Czas logowania"
 }

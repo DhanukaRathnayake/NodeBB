@@ -7,12 +7,13 @@ const user = require('../../user');
 const groups = require('../../groups');
 const meta = require('../../meta');
 const privileges = require('../../privileges');
+
 const now = Date.now();
 module.exports = {
 	name: 'Create verified/unverified user groups',
 	timestamp: Date.UTC(2020, 9, 13),
 	method: async function () {
-		const progress = this.progress;
+		const { progress } = this;
 
 		const maxGroupLength = meta.config.maximumGroupNameLength;
 		meta.config.maximumGroupNameLength = 30;
@@ -43,7 +44,7 @@ module.exports = {
 		}
 		// restore setting
 		meta.config.maximumGroupNameLength = maxGroupLength;
-		await batch.processSortedSet('users:joindate', async function (uids) {
+		await batch.processSortedSet('users:joindate', async (uids) => {
 			progress.incr(uids.length);
 			const userData = await user.getUsersFields(uids, ['uid', 'email:confirmed']);
 
@@ -80,6 +81,8 @@ async function updatePrivilges() {
 	// if email confirmation is required
 	//   give chat, posting privs to "verified-users" group
 	//   remove chat, posting privs from "registered-users" group
+
+	// This config property has been removed from v1.18.0+, but is still present in old datasets
 	if (meta.config.requireEmailConfirmation) {
 		const cids = await db.getSortedSetRevRange('categories:cid', 0, -1);
 		const canChat = await privileges.global.canGroup('chat', 'registered-users');

@@ -1,26 +1,25 @@
-FROM node:lts-alpine3.12
+FROM node:lts
 
-RUN mkdir -p /usr/src/app
+RUN mkdir -p /usr/src/app && \
+    chown -R node:node /usr/src/app
 WORKDIR /usr/src/app
 
-# ARG NODE_ENV
-# ENV NODE_ENV $NODE_ENV
+ARG NODE_ENV
+ENV NODE_ENV $NODE_ENV
 
-# COPY install/package.json /usr/src/app/package.json
+COPY --chown=node:node install/package.json /usr/src/app/package.json
 
-# RUN npm install --only=prod && \
-#     npm cache clean --force
-COPY . .
-RUN pwd
-RUN ls
-RUN npm install
+USER node
 
+RUN npm install --only=prod && \
+    npm cache clean --force
 
-# ENV NODE_ENV=production \
-#     daemon=false \
-#     silent=false
+COPY --chown=node:node . /usr/src/app
+
+ENV NODE_ENV=production \
+    daemon=false \
+    silent=false
 
 EXPOSE 4567
 
-CMD node ./nodebb build ;  node ./nodebb start ;  node ./nodebb log
-
+CMD test -n "${SETUP}" && ./nodebb setup || node ./nodebb build; node ./nodebb start

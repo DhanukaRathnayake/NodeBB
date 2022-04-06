@@ -18,7 +18,7 @@ module.exports = function (User) {
 			return;
 		}
 		const [userData, isAdminOrMod] = await Promise.all([
-			User.getUserFields(uid, ['uid', 'banned', 'joindate', 'email', 'reputation'].concat([field])),
+			User.getUserFields(uid, ['uid', 'banned', 'mutedUntil', 'joindate', 'email', 'reputation'].concat([field])),
 			privileges.categories.isAdminOrMod(cid, uid),
 		]);
 
@@ -35,31 +35,61 @@ module.exports = function (User) {
 		}
 
 		const now = Date.now();
+		if (userData.mutedUntil > now) {
+			let muteLeft = ((userData.mutedUntil - now) / (1000 * 60));
+			if (muteLeft > 60) {
+				muteLeft = (muteLeft / 60).toFixed(0);
+				throw new Error(`[[error:user-muted-for-hours, ${muteLeft}]]`);
+			} else {
+				throw new Error(`[[error:user-muted-for-minutes, ${muteLeft.toFixed(0)}]]`);
+			}
+		}
+
 		if (now - userData.joindate < meta.config.initialPostDelay * 1000) {
-			throw new Error('[[error:user-too-new, ' + meta.config.initialPostDelay + ']]');
+			throw new Error(`[[error:user-too-new, ${meta.config.initialPostDelay}]]`);
 		}
 
 		const lasttime = userData[field] || 0;
 
-		if (meta.config.newbiePostDelay > 0 && meta.config.newbiePostDelayThreshold > userData.reputation && now - lasttime < meta.config.newbiePostDelay * 1000) {
-			throw new Error('[[error:too-many-posts-newbie, ' + meta.config.newbiePostDelay + ', ' + meta.config.newbiePostDelayThreshold + ']]');
+		if (
+			meta.config.newbiePostDelay > 0 &&
+			meta.config.newbiePostDelayThreshold > userData.reputation &&
+			now - lasttime < meta.config.newbiePostDelay * 1000
+		) {
+			throw new Error(`[[error:too-many-posts-newbie, ${meta.config.newbiePostDelay}, ${meta.config.newbiePostDelayThreshold}]]`);
 		} else if (now - lasttime < meta.config.postDelay * 1000) {
-			throw new Error('[[error:too-many-posts, ' + meta.config.postDelay + ']]');
+			throw new Error(`[[error:too-many-posts, ${meta.config.postDelay}]]`);
 		}
 	}
 
 	User.onNewPostMade = async function (postData) {
-		await User.addPostIdToUser(postData);
-		await User.incrementUserPostCountBy(postData.uid, 1);
-		await User.setUserField(postData.uid, 'lastposttime', postData.timestamp);
-		await User.updateLastOnlineTime(postData.uid);
+		// For scheduled posts, use "action" time. It'll be updated in related cron job when post is published
+		const lastposttime = postData.timestamp > Date.now() ? Date.now() : postData.timestamp;
+
+		await Promise.all([
+			User.addPostIdToUser(postData),
+			User.setUserField(postData.uid, 'lastposttime', lastposttime),
+			User.updateLastOnlineTime(postData.uid),
+		]);
 	};
 
 	User.addPostIdToUser = async function (postData) {
 		await db.sortedSetsAdd([
-			'uid:' + postData.uid + ':posts',
-			'cid:' + postData.cid + ':uid:' + postData.uid + ':pids',
+			`uid:${postData.uid}:posts`,
+			`cid:${postData.cid}:uid:${postData.uid}:pids`,
 		], postData.timestamp, postData.pid);
+		await User.updatePostCount(postData.uid);
+	};
+
+	User.updatePostCount = async (uid) => {
+		const exists = await User.exists(uid);
+		if (exists) {
+			const count = await db.sortedSetCard(`uid:${uid}:posts`);
+			await Promise.all([
+				User.setUserField(uid, 'postcount', count),
+				db.sortedSetAdd('users:postcount', count, uid),
+			]);
+		}
 	};
 
 	User.incrementUserPostCountBy = async function (uid, value) {
@@ -89,7 +119,6 @@ module.exports = function (User) {
 	}
 
 	User.getPostIds = async function (uid, start, stop) {
-		const pids = await db.getSortedSetRevRange('uid:' + uid + ':posts', start, stop);
-		return Array.isArray(pids) ? pids : [];
+		return await db.getSortedSetRevRange(`uid:${uid}:posts`, start, stop);
 	};
 };

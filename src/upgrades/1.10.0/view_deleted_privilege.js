@@ -1,27 +1,22 @@
+/* eslint-disable no-await-in-loop */
+
 'use strict';
 
-
-var async = require('async');
-
-var groups = require('../../groups');
-var db = require('../../database');
+const groups = require('../../groups');
+const db = require('../../database');
 
 module.exports = {
 	name: 'Give deleted post viewing privilege to moderators on all categories',
 	timestamp: Date.UTC(2018, 5, 8),
-	method: function (callback) {
-		db.getSortedSetRange('categories:cid', 0, -1, function (err, cids) {
-			if (err) {
-				return callback(err);
+	method: async function () {
+		const { progress } = this;
+		const cids = await db.getSortedSetRange('categories:cid', 0, -1);
+		for (const cid of cids) {
+			const uids = await db.getSortedSetRange(`group:cid:${cid}:privileges:moderate:members`, 0, -1);
+			for (const uid of uids) {
+				await groups.join(`cid:${cid}:privileges:posts:view_deleted`, uid);
 			}
-			async.eachSeries(cids, function (cid, next) {
-				async.waterfall([
-					async.apply(db.getSortedSetRange.bind(db), 'group:cid:' + cid + ':privileges:moderate:members', 0, -1),
-					function (uids, next) {
-						async.eachSeries(uids, (uid, next) => groups.join('cid:' + cid + ':privileges:posts:view_deleted', uid, next), next);
-					},
-				], next);
-			}, callback);
-		});
+			progress.incr();
+		}
 	},
 };

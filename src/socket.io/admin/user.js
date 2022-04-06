@@ -4,11 +4,9 @@ const async = require('async');
 const winston = require('winston');
 
 const db = require('../../database');
-const api = require('../../api');
 const groups = require('../../groups');
 const user = require('../../user');
 const events = require('../../events');
-const meta = require('../../meta');
 const translator = require('../../translator');
 const sockets = require('..');
 
@@ -18,12 +16,10 @@ User.makeAdmins = async function (socket, uids) {
 	if (!Array.isArray(uids)) {
 		throw new Error('[[error:invalid-data]]');
 	}
-	const userData = await user.getUsersFields(uids, ['banned']);
-	userData.forEach((userData) => {
-		if (userData && userData.banned) {
-			throw new Error('[[error:cant-make-banned-users-admin]]');
-		}
-	});
+	const isMembersOfBanned = await groups.isMembers(uids, groups.BANNED_USERS);
+	if (isMembersOfBanned.includes(true)) {
+		throw new Error('[[error:cant-make-banned-users-admin]]');
+	}
 	for (const uid of uids) {
 		/* eslint-disable no-await-in-loop */
 		await groups.join('administrators', uid);
@@ -56,11 +52,6 @@ User.removeAdmins = async function (socket, uids) {
 	}
 };
 
-User.createUser = async function (socket, userData) {
-	sockets.warnDeprecated(socket, 'POST /api/v3/users');
-	return await api.users.create(socket, userData);
-};
-
 User.resetLockouts = async function (socket, uids) {
 	if (!Array.isArray(uids)) {
 		throw new Error('[[error:invalid-data]]');
@@ -83,15 +74,15 @@ User.sendValidationEmail = async function (socket, uids) {
 		throw new Error('[[error:invalid-data]]');
 	}
 
-	if (!meta.config.requireEmailConfirmation) {
-		throw new Error('[[error:email-confirmations-are-disabled]]');
-	}
-
 	const failed = [];
-
-	await async.eachLimit(uids, 50, async function (uid) {
+	let errorLogged = false;
+	await async.eachLimit(uids, 50, async (uid) => {
 		await user.email.sendValidationEmail(uid, { force: true }).catch((err) => {
-			winston.error('[user.create] Validation email failed to send\n[emailer.send] ' + err.stack);
+			if (!errorLogged) {
+				winston.error(`[user.create] Validation email failed to send\n[emailer.send] ${err.stack}`);
+				errorLogged = true;
+			}
+
 			failed.push(uid);
 		});
 	});
@@ -108,10 +99,10 @@ User.sendPasswordResetEmail = async function (socket, uids) {
 
 	uids = uids.filter(uid => parseInt(uid, 10));
 
-	await Promise.all(uids.map(async function (uid) {
+	await Promise.all(uids.map(async (uid) => {
 		const userData = await user.getUserFields(uid, ['email', 'username']);
 		if (!userData.email) {
-			throw new Error('[[error:user-doesnt-have-email, ' + userData.username + ']]');
+			throw new Error(`[[error:user-doesnt-have-email, ${userData.username}]]`);
 		}
 		await user.reset.send(userData.email);
 	}));
@@ -124,28 +115,9 @@ User.forcePasswordReset = async function (socket, uids) {
 
 	uids = uids.filter(uid => parseInt(uid, 10));
 
-	await db.setObjectField(uids.map(uid => 'user:' + uid), 'passwordExpiry', Date.now());
+	await db.setObjectField(uids.map(uid => `user:${uid}`), 'passwordExpiry', Date.now());
 	await user.auth.revokeAllSessions(uids);
-	uids.forEach(uid => sockets.in('uid_' + uid).emit('event:logout'));
-};
-
-User.deleteUsers = async function (socket, uids) {
-	sockets.warnDeprecated(socket, 'DELETE /api/v3/users/:uid/account');
-	await Promise.all(uids.map(async (uid) => {
-		await api.users.deleteAccount(socket, { uid });
-	}));
-};
-
-User.deleteUsersContent = async function (socket, uids) {
-	sockets.warnDeprecated(socket, 'DELETE /api/v3/users/:uid/content');
-	await Promise.all(uids.map(async (uid) => {
-		await api.users.deleteContent(socket, { uid });
-	}));
-};
-
-User.deleteUsersAndContent = async function (socket, uids) {
-	sockets.warnDeprecated(socket, 'DELETE /api/v3/users or DELETE /api/v3/users/:uid');
-	await api.users.deleteMany(socket, { uids });
+	uids.forEach(uid => sockets.in(`uid_${uid}`).emit('event:logout'));
 };
 
 User.restartJobs = async function () {
@@ -172,10 +144,12 @@ User.exportUsersCSV = async function (socket) {
 		uid: socket.uid,
 		ip: socket.ip,
 	});
-	setTimeout(async function () {
+	setTimeout(async () => {
 		try {
 			await user.exportUsersCSV();
-			socket.emit('event:export-users-csv');
+			if (socket.emit) {
+				socket.emit('event:export-users-csv');
+			}
 			const notifications = require('../../notifications');
 			const n = await notifications.create({
 				bodyShort: '[[notifications:users-csv-exported]]',
@@ -185,7 +159,7 @@ User.exportUsersCSV = async function (socket) {
 			});
 			await notifications.push(n, [socket.uid]);
 		} catch (err) {
-			winston.error(err);
+			winston.error(err.stack);
 		}
 	}, 0);
 };

@@ -3,9 +3,9 @@
 
 define('forum/account/profile', [
 	'forum/account/header',
-	'components',
-], function (header) {
-	var Account = {};
+	'bootbox',
+], function (header, bootbox) {
+	const Account = {};
 
 	Account.init = function () {
 		header.init();
@@ -13,6 +13,10 @@ define('forum/account/profile', [
 		app.enterRoom('user/' + ajaxify.data.theirid);
 
 		processPage();
+
+		if (parseInt(ajaxify.data.emailChanged, 10) === 1) {
+			bootbox.alert('[[user:emailUpdate.change-instructions]]');
+		}
 
 		socket.removeListener('event:user_status_change', onUserStatusChange);
 		socket.on('event:user_status_change', onUserStatusChange);

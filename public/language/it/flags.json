@@ -6,6 +6,7 @@
 	"assignee": "Assegnatario",
 	"update": "Aggiorna",
 	"updated": "Aggiornato",
+	"resolved": "Risolto",
 	"target-purged": "Il contenuto di questa segnalazione è stato eliminato e non è più disponibile.",
 
 	"graph-label": "Segnalazioni Giornaliere",
@@ -26,6 +27,7 @@
 	"filter-cid-all": "Tutte le categorie",
 	"apply-filters": "Applica Filtri",
 	"more-filters": "Altri filtri",
+	"fewer-filters": "Meno filtri",
 
 	"quick-actions": "Azioni rapide",
 	"flagged-user": "Utente Segnalato",
@@ -75,12 +77,10 @@
 	"modal-reason-custom": "Motivo per cui segnali questo contenuto...",
 	"modal-submit": "Invia segnalazione",
 	"modal-submit-success": "Il contenuto è stato segnalato per la moderazione.",
-	"modal-submit-confirm": "Conferma richiesta",
-	"modal-submit-confirm-text": "Hai già specificato un motivo personalizzato. Sei sicuro di voler inviare una segnalazione rapida?",
-	"modal-submit-confirm-text-help": "L'invio di una segnalazione rapida sovrascrive qualsiasi motivo personalizzato definito.",
 
 	"bulk-actions": "Azioni in blocco",
-	"bulk-resolve": "Risoluzione segnalazione(i)",
+	"bulk-resolve": "Risolvi segnalazione(i)",
 	"bulk-success": "%1 segnalazioni aggiornate",
-	"flagged-timeago-readable": "Segnalato <span class=\"timeago\" title=\"%1\"></span> (%2)"
+	"flagged-timeago-readable": "Segnalato <span class=\"timeago\" title=\"%1\"></span> (%2)",
+  	"auto-flagged": "[Auto Flagged] Received %1 downvotes."
 }

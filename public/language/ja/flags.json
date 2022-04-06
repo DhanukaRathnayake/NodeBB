@@ -6,6 +6,7 @@
 	"assignee": "譲受人",
 	"update": "更新",
 	"updated": "更新されました",
+	"resolved": "Resolved",
 	"target-purged": "このフラグが参照しているコンテンツは切り離されており、利用できません。",
 
 	"graph-label": "Daily Flags",
@@ -26,6 +27,7 @@
 	"filter-cid-all": "全てのカテゴリ",
 	"apply-filters": "フィルターを追加",
 	"more-filters": "More Filters",
+	"fewer-filters": "Fewer Filters",
 
 	"quick-actions": "Quick Actions",
 	"flagged-user": "フラグを立てたユーザー",
@@ -75,12 +77,10 @@
 	"modal-reason-custom": "このコンテンツを報告する理由...",
 	"modal-submit": "レポートを提出",
 	"modal-submit-success": "コンテンツはモデレーションにフラグ付けされています。",
-	"modal-submit-confirm": "Confirm Submission",
-	"modal-submit-confirm-text": "You have a custom reason specified already. Are you sure you wish to submit via quick-report?",
-	"modal-submit-confirm-text-help": "Submitting a quick report will overwrite any custom reasons defined.",
 
 	"bulk-actions": "Bulk Actions",
 	"bulk-resolve": "Resolve Flag(s)",
 	"bulk-success": "%1 flags updated",
-	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)"
+	"flagged-timeago-readable": "Flagged <span class=\"timeago\" title=\"%1\"></span> (%2)",
+  	"auto-flagged": "[Auto Flagged] Received %1 downvotes."
 }

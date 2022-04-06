@@ -6,6 +6,7 @@ const util = require('util');
 const semver = require('semver');
 const readline = require('readline');
 const winston = require('winston');
+const chalk = require('chalk');
 
 const db = require('./database');
 const file = require('./file');
@@ -26,7 +27,7 @@ Upgrade.getAll = async function () {
 	let files = await file.walk(path.join(__dirname, './upgrades'));
 
 	// Sort the upgrade scripts based on version
-	files = files.filter(file => path.basename(file) !== 'TEMPLATE').sort(function (a, b) {
+	files = files.filter(file => path.basename(file) !== 'TEMPLATE').sort((a, b) => {
 		const versionA = path.dirname(a).split(path.sep).pop();
 		const versionB = path.dirname(b).split(path.sep).pop();
 		const semverCompare = semver.compare(versionA, versionB);
@@ -51,7 +52,7 @@ Upgrade.getAll = async function () {
 		}
 	});
 	if (dupes.length) {
-		winston.error('Found duplicate upgrade scripts\n' + dupes);
+		winston.error(`Found duplicate upgrade scripts\n${dupes}`);
 		throw new Error('[[error:duplicate-upgrade-scripts]]');
 	}
 
@@ -66,12 +67,14 @@ Upgrade.appendPluginScripts = async function (files) {
 		try {
 			const pluginConfig = require(configPath);
 			if (pluginConfig.hasOwnProperty('upgrades') && Array.isArray(pluginConfig.upgrades)) {
-				pluginConfig.upgrades.forEach(function (script) {
+				pluginConfig.upgrades.forEach((script) => {
 					files.push(path.join(path.dirname(configPath), script));
 				});
 			}
 		} catch (e) {
-			winston.warn('[upgrade/appendPluginScripts] Unable to read plugin.json for plugin `' + plugin + '`. Skipping.');
+			if (e.code !== 'MODULE_NOT_FOUND') {
+				winston.error(e.stack);
+			}
 		}
 	});
 	return files;
@@ -96,7 +99,7 @@ Upgrade.run = async function () {
 	]);
 
 	let skipped = 0;
-	const queue = available.filter(function (cur) {
+	const queue = available.filter((cur) => {
 		const upgradeRan = completed.includes(path.basename(cur, '.js'));
 		if (upgradeRan) {
 			skipped += 1;
@@ -116,7 +119,7 @@ Upgrade.runParticular = async function (names) {
 };
 
 Upgrade.process = async function (files, skipCount) {
-	console.log('OK'.green + ' | '.reset + String(files.length).cyan + ' script(s) found'.cyan + (skipCount > 0 ? ', '.cyan + String(skipCount).cyan + ' skipped'.cyan : ''));
+	console.log(`${chalk.green('OK')} | ${chalk.cyan(`${files.length} script(s) found`)}${skipCount > 0 ? chalk.cyan(`, ${skipCount} skipped`) : ''}`);
 	const [schemaDate, schemaLogCount] = await Promise.all([
 		db.get('schemaDate'),
 		db.sortedSetCard('schemaLog'),
@@ -136,11 +139,11 @@ Upgrade.process = async function (files, skipCount) {
 			date: date,
 		};
 
-		process.stdout.write('  → '.white + String('[' + [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()].join('/') + '] ').gray + String(scriptExport.name).reset + '...');
+		process.stdout.write(`${chalk.white('  → ') + chalk.gray(`[${[date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()].join('/')}] `) + scriptExport.name}...`);
 
 		// For backwards compatibility, cross-reference with schemaDate (if found). If a script's date is older, skip it
 		if ((!schemaDate && !schemaLogCount) || (scriptExport.timestamp <= schemaDate && semver.lt(version, '1.5.0'))) {
-			process.stdout.write(' skipped\n'.grey);
+			process.stdout.write(chalk.grey(' skipped\n'));
 
 			await db.sortedSetAdd('schemaLog', Date.now(), path.basename(file, '.js'));
 			// eslint-disable-next-line no-continue
@@ -153,6 +156,7 @@ Upgrade.process = async function (files, skipCount) {
 		}
 
 		// Do the upgrade...
+		const upgradeStart = Date.now();
 		try {
 			await scriptExport.method.bind({
 				progress: progress,
@@ -161,14 +165,14 @@ Upgrade.process = async function (files, skipCount) {
 			console.error('Error occurred');
 			throw err;
 		}
-
-		process.stdout.write(' OK\n'.green);
+		const upgradeDuration = ((Date.now() - upgradeStart) / 1000).toFixed(2);
+		process.stdout.write(chalk.green(` OK (${upgradeDuration} seconds)\n`));
 
 		// Record success in schemaLog
 		await db.sortedSetAdd('schemaLog', Date.now(), path.basename(file, '.js'));
 	}
 
-	console.log('Schema update complete!\n'.green);
+	console.log(chalk.green('Schema update complete!\n'));
 };
 
 Upgrade.incrementProgress = function (value) {
@@ -183,17 +187,17 @@ Upgrade.incrementProgress = function (value) {
 
 	if (this.counter > step || this.current >= this.total) {
 		this.counter -= step;
-		var percentage = 0;
-		var filled = 0;
-		var unfilled = 15;
+		let percentage = 0;
+		let filled = 0;
+		let unfilled = 15;
 		if (this.total) {
-			percentage = Math.floor((this.current / this.total) * 100) + '%';
+			percentage = `${Math.floor((this.current / this.total) * 100)}%`;
 			filled = Math.floor((this.current / this.total) * 15);
 			unfilled = Math.max(0, 15 - filled);
 		}
 
 		readline.cursorTo(process.stdout, 0);
-		process.stdout.write('    [' + (filled ? new Array(filled).join('#') : '') + new Array(unfilled).join(' ') + '] (' + this.current + '/' + (this.total || '??') + ') ' + percentage + ' ');
+		process.stdout.write(`    [${filled ? new Array(filled).join('#') : ''}${new Array(unfilled).join(' ')}] (${this.current}/${this.total || '??'}) ${percentage} `);
 	}
 };
 

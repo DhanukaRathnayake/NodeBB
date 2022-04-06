@@ -15,6 +15,8 @@ const groupsAPI = module.exports;
 groupsAPI.create = async function (caller, data) {
 	if (!caller.uid) {
 		throw new Error('[[error:no-privileges]]');
+	} else if (!data) {
+		throw new Error('[[error:invalid-data]]');
 	} else if (typeof data.name !== 'string' || groups.isPrivilegeGroup(data.name)) {
 		throw new Error('[[error:invalid-group-name]]');
 	}
@@ -34,6 +36,9 @@ groupsAPI.create = async function (caller, data) {
 };
 
 groupsAPI.update = async function (caller, data) {
+	if (!data) {
+		throw new Error('[[error:invalid-data]]');
+	}
 	const groupName = await groups.getGroupNameByGroupSlug(data.slug);
 	await isOwner(caller, groupName);
 
@@ -60,6 +65,9 @@ groupsAPI.delete = async function (caller, data) {
 };
 
 groupsAPI.join = async function (caller, data) {
+	if (!data) {
+		throw new Error('[[error:invalid-data]]');
+	}
 	if (caller.uid <= 0 || !data.uid) {
 		throw new Error('[[error:invalid-uid]]');
 	}
@@ -98,7 +106,7 @@ groupsAPI.join = async function (caller, data) {
 		return;
 	}
 
-	if (isSelf && groupData.private && groupData.disableJoinRequests) {
+	if (!isCallerAdmin && isSelf && groupData.private && groupData.disableJoinRequests) {
 		throw new Error('[[error:group-join-disabled]]');
 	}
 
@@ -118,6 +126,9 @@ groupsAPI.join = async function (caller, data) {
 };
 
 groupsAPI.leave = async function (caller, data) {
+	if (!data) {
+		throw new Error('[[error:invalid-data]]');
+	}
 	if (caller.uid <= 0) {
 		throw new Error('[[error:invalid-uid]]');
 	}
@@ -160,12 +171,13 @@ groupsAPI.leave = async function (caller, data) {
 		throw new Error('[[error:no-privileges]]');
 	}
 
-	const username = await user.getUserField(data.uid, 'username');
+	const { displayname } = await user.getUserFields(data.uid, ['username']);
+
 	const notification = await notifications.create({
 		type: 'group-leave',
-		bodyShort: '[[groups:membership.leave.notification_title, ' + username + ', ' + groupName + ']]',
-		nid: 'group:' + validator.escape(groupName) + ':uid:' + data.uid + ':group-leave',
-		path: '/groups/' + slugify(groupName),
+		bodyShort: `[[groups:membership.leave.notification_title, ${displayname}, ${groupName}]]`,
+		nid: `group:${validator.escape(groupName)}:uid:${data.uid}:group-leave`,
+		path: `/groups/${slugify(groupName)}`,
 		from: data.uid,
 	});
 	const uids = await groups.getOwners(groupName);

@@ -3,6 +3,7 @@
 const winston = require('winston');
 const childProcess = require('child_process');
 const CliGraph = require('cli-graph');
+const chalk = require('chalk');
 
 const build = require('../meta/build');
 const db = require('../database');
@@ -23,8 +24,11 @@ async function activate(plugin) {
 		await db.init();
 		if (!pluginNamePattern.test(plugin)) {
 			// Allow omission of `nodebb-plugin-`
-			plugin = 'nodebb-plugin-' + plugin;
+			plugin = `nodebb-plugin-${plugin}`;
 		}
+
+		plugin = await plugins.autocomplete(plugin);
+
 		const isInstalled = await plugins.isInstalled(plugin);
 		if (!isInstalled) {
 			throw new Error('plugin not installed');
@@ -42,7 +46,7 @@ async function activate(plugin) {
 			text: plugin,
 		});
 	} catch (err) {
-		winston.error('An error occurred during plugin activation\n' + err.stack);
+		winston.error(`An error occurred during plugin activation\n${err.stack}`);
 	}
 	process.exit(0);
 }
@@ -72,51 +76,51 @@ async function listPlugins() {
 	// Pretty output
 	process.stdout.write('Active plugins:\n');
 	combined.forEach((plugin) => {
-		process.stdout.write('\t* ' + plugin.id + (plugin.version ? '@' + plugin.version : '') + ' (');
-		process.stdout.write(plugin.installed ? 'installed'.green : 'not installed'.red);
+		process.stdout.write(`\t* ${plugin.id}${plugin.version ? `@${plugin.version}` : ''} (`);
+		process.stdout.write(plugin.installed ? chalk.green('installed') : chalk.red('not installed'));
 		process.stdout.write(', ');
-		process.stdout.write(plugin.active ? 'enabled'.green : 'disabled'.yellow);
+		process.stdout.write(plugin.active ? chalk.green('enabled') : chalk.yellow('disabled'));
 		process.stdout.write(')\n');
 	});
 
 	process.exit();
 }
 
-async function listEvents(count) {
+async function listEvents(count = 10) {
 	await db.init();
-	const eventData = await events.getEvents('', 0, (count || 10) - 1);
-	console.log(('\nDisplaying last ' + count + ' administrative events...').bold);
-	eventData.forEach(function (event) {
-		console.log('  * ' + String(event.timestampISO).green + ' ' + String(event.type).yellow + (event.text ? ' ' + event.text : '') + ' (uid: '.reset + (event.uid ? event.uid : 0) + ')');
+	const eventData = await events.getEvents('', 0, count - 1);
+	console.log(chalk.bold(`\nDisplaying last ${count} administrative events...`));
+	eventData.forEach((event) => {
+		console.log(`  * ${chalk.green(String(event.timestampISO))} ${chalk.yellow(String(event.type))}${event.text ? ` ${event.text}` : ''} (uid: ${event.uid ? event.uid : 0})`);
 	});
 	process.exit();
 }
 
 async function info() {
 	console.log('');
-	const version = require('../../package.json').version;
-	console.log('  version:  ' + version);
+	const { version } = require('../../package.json');
+	console.log(`  version:  ${version}`);
 
-	console.log('  Node ver: ' + process.version);
+	console.log(`  Node ver: ${process.version}`);
 
 	const hash = childProcess.execSync('git rev-parse HEAD');
-	console.log('  git hash: ' + hash);
+	console.log(`  git hash: ${hash}`);
 
 	const config = require('../../config.json');
-	console.log('  database: ' + config.database);
+	console.log(`  database: ${config.database}`);
 
 	await db.init();
 	const info = await db.info(db.client);
 
 	switch (config.database) {
 		case 'redis':
-			console.log('        version: ' + info.redis_version);
-			console.log('        disk sync:  ' + info.rdb_last_bgsave_status);
+			console.log(`        version: ${info.redis_version}`);
+			console.log(`        disk sync:  ${info.rdb_last_bgsave_status}`);
 			break;
 
 		case 'mongo':
-			console.log('        version: ' + info.version);
-			console.log('        engine:  ' + info.storageEngine);
+			console.log(`        version: ${info.version}`);
+			console.log(`        engine:  ${info.storageEngine}`);
 			break;
 	}
 
@@ -132,13 +136,13 @@ async function info() {
 	const min = Math.min(...analyticsData);
 	const max = Math.max(...analyticsData);
 
-	analyticsData.forEach(function (point, idx) {
+	analyticsData.forEach((point, idx) => {
 		graph.addPoint(idx + 1, Math.round(point / max * 10));
 	});
 
 	console.log('');
 	console.log(graph.toString());
-	console.log('Pageviews, last 24h (min: ' + min + '  max: ' + max + ')');
+	console.log(`Pageviews, last 24h (min: ${min}  max: ${max})`);
 	process.exit();
 }
 

@@ -2,12 +2,12 @@
 
 
 define('forum/account/watched', ['forum/account/header', 'forum/account/topics'], function (header, topics) {
-	var AccountWatched = {};
+	const AccountWatched = {};
 
 	AccountWatched.init = function () {
 		header.init();
 
-		topics.handleInfiniteScroll('topics.loadMoreFromSet', 'account/watched', 'uid:' + ajaxify.data.theirid + ':followed_tids');
+		topics.handleInfiniteScroll('account/watched');
 	};
 
 	return AccountWatched;

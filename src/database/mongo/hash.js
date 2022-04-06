@@ -14,6 +14,9 @@ module.exports = function (module) {
 		}
 
 		const writeData = helpers.serializeData(data);
+		if (!Object.keys(writeData).length) {
+			return;
+		}
 		try {
 			if (isArray) {
 				const bulk = module.client.collection('objects').initializeUnorderedBulkOp();
@@ -32,26 +35,61 @@ module.exports = function (module) {
 		cache.del(key);
 	};
 
+	module.setObjectBulk = async function (...args) {
+		let data = args[0];
+		if (!Array.isArray(data) || !data.length) {
+			return;
+		}
+		if (Array.isArray(args[1])) {
+			console.warn('[deprecated] db.setObjectBulk(keys, data) usage is deprecated, please use db.setObjectBulk(data)');
+			// conver old format to new format for backwards compatibility
+			data = args[0].map((key, i) => [key, args[1][i]]);
+		}
+
+		try {
+			let bulk;
+			data.forEach((item) => {
+				const writeData = helpers.serializeData(item[1]);
+				if (Object.keys(writeData).length) {
+					if (!bulk) {
+						bulk = module.client.collection('objects').initializeUnorderedBulkOp();
+					}
+					bulk.find({ _key: item[0] }).upsert().updateOne({ $set: writeData });
+				}
+			});
+			if (bulk) {
+				await bulk.execute();
+			}
+		} catch (err) {
+			if (err && err.message.startsWith('E11000 duplicate key error')) {
+				return await module.setObjectBulk(data);
+			}
+			throw err;
+		}
+
+		cache.del(data.map(item => item[0]));
+	};
+
 	module.setObjectField = async function (key, field, value) {
 		if (!field) {
 			return;
 		}
-		var data = {};
+		const data = {};
 		data[field] = value;
 		await module.setObject(key, data);
 	};
 
-	module.getObject = async function (key) {
+	module.getObject = async function (key, fields = []) {
 		if (!key) {
 			return null;
 		}
 
-		const data = await module.getObjects([key]);
+		const data = await module.getObjects([key], fields);
 		return data && data.length ? data[0] : null;
 	};
 
-	module.getObjects = async function (keys) {
-		return await module.getObjectsFields(keys, []);
+	module.getObjects = async function (keys, fields = []) {
+		return await module.getObjectsFields(keys, fields);
 	};
 
 	module.getObjectField = async function (key, field) {
@@ -95,15 +133,15 @@ module.exports = function (module) {
 		}
 
 		const map = helpers.toMap(data);
-		unCachedKeys.forEach(function (key) {
+		unCachedKeys.forEach((key) => {
 			cachedData[key] = map[key] || null;
 			cache.set(key, cachedData[key]);
 		});
 
-		if (!fields.length) {
+		if (!Array.isArray(fields) || !fields.length) {
 			return keys.map(key => (cachedData[key] ? { ...cachedData[key] } : null));
 		}
-		return keys.map(function (key) {
+		return keys.map((key) => {
 			const item = cachedData[key] || {};
 			const result = {};
 			fields.forEach((field) => {
@@ -134,9 +172,11 @@ module.exports = function (module) {
 		}
 
 		const data = {};
-		fields.forEach(function (field) {
+		fields.forEach((field) => {
 			field = helpers.fieldToString(field);
-			data[field] = 1;
+			if (field) {
+				data[field] = 1;
+			}
 		});
 
 		const item = await module.client.collection('objects').findOne({ _key: key }, { projection: data });
@@ -157,8 +197,8 @@ module.exports = function (module) {
 			return;
 		}
 
-		var data = {};
-		fields.forEach(function (field) {
+		const data = {};
+		fields.forEach((field) => {
 			field = helpers.fieldToString(field);
 			data[field] = '';
 		});
@@ -185,13 +225,13 @@ module.exports = function (module) {
 			return null;
 		}
 
-		var increment = {};
+		const increment = {};
 		field = helpers.fieldToString(field);
 		increment[field] = value;
 
 		if (Array.isArray(key)) {
-			var bulk = module.client.collection('objects').initializeUnorderedBulkOp();
-			key.forEach(function (key) {
+			const bulk = module.client.collection('objects').initializeUnorderedBulkOp();
+			key.forEach((key) => {
 				bulk.find({ _key: key }).upsert().update({ $inc: increment });
 			});
 			await bulk.execute();
@@ -199,9 +239,26 @@ module.exports = function (module) {
 			const result = await module.getObjectsFields(key, [field]);
 			return result.map(data => data && data[field]);
 		}
-
-		const result = await module.client.collection('objects').findOneAndUpdate({ _key: key }, { $inc: increment }, { returnOriginal: false, upsert: true });
-		cache.del(key);
-		return result && result.value ? result.value[field] : null;
+		try {
+			const result = await module.client.collection('objects').findOneAndUpdate({
+				_key: key,
+			}, {
+				$inc: increment,
+			}, {
+				returnDocument: 'after',
+				upsert: true,
+			});
+			cache.del(key);
+			return result && result.value ? result.value[field] : null;
+		} catch (err) {
+			// if there is duplicate key error retry the upsert
+			// https://github.com/NodeBB/NodeBB/issues/4467
+			// https://jira.mongodb.org/browse/SERVER-14322
+			// https://docs.mongodb.org/manual/reference/command/findAndModify/#upsert-and-unique-index
+			if (err && err.message.startsWith('E11000 duplicate key error')) {
+				return await module.incrObjectFieldBy(key, field, value);
+			}
+			throw err;
+		}
 	};
 };

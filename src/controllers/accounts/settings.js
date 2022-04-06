@@ -18,7 +18,7 @@ const accountHelpers = require('./helpers');
 const settingsController = module.exports;
 
 settingsController.get = async function (req, res, next) {
-	const userData = await accountHelpers.getUserDataByUserSlug(req.params.userslug, req.uid);
+	const userData = await accountHelpers.getUserDataByUserSlug(req.params.userslug, req.uid, req.query);
 	if (!userData) {
 		return next();
 	}
@@ -53,39 +53,40 @@ settingsController.get = async function (req, res, next) {
 		{ value: 'off', name: '[[user:digest_off]]', selected: userData.settings.dailyDigestFreq === 'off' },
 		{ value: 'day', name: '[[user:digest_daily]]', selected: userData.settings.dailyDigestFreq === 'day' },
 		{ value: 'week', name: '[[user:digest_weekly]]', selected: userData.settings.dailyDigestFreq === 'week' },
+		{ value: 'biweek', name: '[[user:digest_biweekly]]', selected: userData.settings.dailyDigestFreq === 'biweek' },
 		{ value: 'month', name: '[[user:digest_monthly]]', selected: userData.settings.dailyDigestFreq === 'month' },
 	];
 
 	userData.bootswatchSkinOptions = [
 		{ name: 'Default', value: '' },
 		{ name: 'Cerulean', value: 'cerulean' },
-		{ name: 'Cosmo', value: 'cosmo'	},
+		{ name: 'Cosmo', value: 'cosmo' },
 		{ name: 'Cyborg', value: 'cyborg' },
 		{ name: 'Darkly', value: 'darkly' },
 		{ name: 'Flatly', value: 'flatly' },
-		{ name: 'Journal', value: 'journal'	},
+		{ name: 'Journal', value: 'journal' },
 		{ name: 'Lumen', value: 'lumen' },
 		{ name: 'Paper', value: 'paper' },
 		{ name: 'Readable', value: 'readable' },
 		{ name: 'Sandstone', value: 'sandstone' },
 		{ name: 'Simplex', value: 'simplex' },
-		{ name: 'Slate', value: 'slate'	},
+		{ name: 'Slate', value: 'slate' },
 		{ name: 'Spacelab', value: 'spacelab' },
 		{ name: 'Superhero', value: 'superhero' },
 		{ name: 'United', value: 'united' },
 		{ name: 'Yeti', value: 'yeti' },
 	];
 
-	userData.bootswatchSkinOptions.forEach(function (skin) {
+	userData.bootswatchSkinOptions.forEach((skin) => {
 		skin.selected = skin.value === userData.settings.bootswatchSkin;
 	});
 
-	userData.languages.forEach(function (language) {
+	userData.languages.forEach((language) => {
 		language.selected = language.code === userData.settings.userLang;
 	});
 
 	if (userData.isAdmin && userData.isSelf) {
-		userData.acpLanguages.forEach(function (language) {
+		userData.acpLanguages.forEach((language) => {
 			language.selected = language.code === userData.settings.acpLang;
 		});
 	}
@@ -99,7 +100,9 @@ settingsController.get = async function (req, res, next) {
 		'disabled',
 	];
 
-	userData.upvoteNotifFreq = notifFreqOptions.map(name => ({ name: name, selected: name === userData.settings.upvoteNotifFreq }));
+	userData.upvoteNotifFreq = notifFreqOptions.map(
+		name => ({ name: name, selected: name === userData.settings.upvoteNotifFreq })
+	);
 
 	userData.categoryWatchState = { [userData.settings.categoryWatchState]: true };
 
@@ -116,13 +119,13 @@ settingsController.get = async function (req, res, next) {
 	userData.maxPostsPerPage = meta.config.maxPostsPerPage;
 
 	userData.title = '[[pages:account/settings]]';
-	userData.breadcrumbs = helpers.buildBreadcrumbs([{ text: userData.username, url: '/user/' + userData.userslug }, { text: '[[user:settings]]' }]);
+	userData.breadcrumbs = helpers.buildBreadcrumbs([{ text: userData.username, url: `/user/${userData.userslug}` }, { text: '[[user:settings]]' }]);
 
 	res.render('account/settings', userData);
 };
 
 const unsubscribable = ['digest', 'notification'];
-const jwtVerifyAsync = util.promisify(function (token, callback) {
+const jwtVerifyAsync = util.promisify((token, callback) => {
 	jwt.verify(token, nconf.get('secret'), (err, payload) => callback(err, payload));
 });
 const doUnsubscribe = async (payload) => {
@@ -132,30 +135,26 @@ const doUnsubscribe = async (payload) => {
 			user.updateDigestSetting(payload.uid, 'off'),
 		]);
 	} else if (payload.template === 'notification') {
-		const current = await db.getObjectField('user:' + payload.uid + ':settings', 'notificationType_' + payload.type);
-		await user.setSetting(payload.uid, 'notificationType_' + payload.type, (current === 'notificationemail' ? 'notification' : 'none'));
+		const current = await db.getObjectField(`user:${payload.uid}:settings`, `notificationType_${payload.type}`);
+		await user.setSetting(payload.uid, `notificationType_${payload.type}`, (current === 'notificationemail' ? 'notification' : 'none'));
 	}
 	return true;
 };
 
 settingsController.unsubscribe = async (req, res) => {
-	let payload;
 	try {
-		payload = await jwtVerifyAsync(req.params.token);
+		const payload = await jwtVerifyAsync(req.params.token);
 		if (!payload || !unsubscribable.includes(payload.template)) {
 			return;
 		}
-	} catch (err) {
-		throw new Error(err);
-	}
-
-	try {
 		await doUnsubscribe(payload);
 		res.render('unsubscribe', {
-			payload: payload,
+			payload,
 		});
 	} catch (err) {
-		throw new Error(err);
+		res.render('unsubscribe', {
+			error: err.message,
+		});
 	}
 };
 
@@ -173,7 +172,7 @@ settingsController.unsubscribePost = async function (req, res) {
 		await doUnsubscribe(payload);
 		res.sendStatus(200);
 	} catch (err) {
-		winston.error('[settings/unsubscribe] One-click unsubscribe failed with error: ' + err.message);
+		winston.error(`[settings/unsubscribe] One-click unsubscribe failed with error: ${err.message}`);
 		res.sendStatus(500);
 	}
 };
@@ -200,7 +199,7 @@ async function getNotificationSettings(userData) {
 		const setting = userData.settings[type];
 		return {
 			name: type,
-			label: '[[notifications:' + type + ']]',
+			label: `[[notifications:${type}]]`,
 			none: setting === 'none',
 			notification: setting === 'notification',
 			email: setting === 'email',
@@ -219,9 +218,9 @@ async function getHomePageRoutes(userData) {
 	let routes = await helpers.getHomePageRoutes(userData.uid);
 
 	// Set selected for each route
-	var customIdx;
-	var hasSelected = false;
-	routes = routes.map(function (route, idx) {
+	let customIdx;
+	let hasSelected = false;
+	routes = routes.map((route, idx) => {
 		if (route.route === userData.settings.homePageRoute) {
 			route.selected = true;
 			hasSelected = true;

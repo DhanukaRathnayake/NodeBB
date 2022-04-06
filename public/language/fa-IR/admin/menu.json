@@ -1,9 +1,14 @@
 {
-	"dashboard": "Dashboard",
+	"section-dashboard": "Dashboards",
+	"dashboard/overview": "Overview",
+	"dashboard/logins": "Logins",
+	"dashboard/users": "Users",
+	"dashboard/topics": "Topics",
+	"dashboard/searches": "Searches",
 	"section-general": "عمومی",
 
 	"section-manage": "Manage",
-	"manage/categories": "Categories",
+	"manage/categories": "دسته‌بندی‌ها",
 	"manage/privileges": "Privileges",
 	"manage/tags": "Tags",
 	"manage/users": "کاربران",
@@ -77,7 +82,7 @@
 	"search.keep-typing": "لطفا برای مشاهده نتیجه بیشتر بنویسید",
 	"search.start-typing": "Start typing to see results...",
 
-	"connection-lost": "اتصال شما به %1  به نظر می‌رسد از دست رفته. لطفا صبر کنید ما سعی می‌کنیم که دوباره شما را متصل کنیم.",
+	"connection-lost": "به نظر می‌رسد اتصال شما به %1 از دست رفته. لطفا صبر کنید ما سعی می‌کنیم که دوباره شما را متصل کنیم.",
 
 	"alerts.version": "Running <strong>NodeBB v%1</strong>",
 	"alerts.upgrade": "Upgrade to v%1"

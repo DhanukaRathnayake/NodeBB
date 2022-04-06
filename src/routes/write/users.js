@@ -5,7 +5,7 @@ const middleware = require('../../middleware');
 const controllers = require('../../controllers');
 const routeHelpers = require('../helpers');
 
-const setupApiRoute = routeHelpers.setupApiRoute;
+const { setupApiRoute } = routeHelpers;
 
 // eslint-disable-next-line no-unused-vars
 function guestRoutes() {
@@ -13,14 +13,16 @@ function guestRoutes() {
 }
 
 function authenticatedRoutes() {
-	const middlewares = [middleware.authenticate];
+	const middlewares = [middleware.ensureLoggedIn];
 
 	setupApiRoute(router, 'post', '/', [...middlewares, middleware.checkRequired.bind(null, ['username'])], controllers.write.users.create);
 	setupApiRoute(router, 'delete', '/', [...middlewares, middleware.checkRequired.bind(null, ['uids'])], controllers.write.users.deleteMany);
 
 	setupApiRoute(router, 'head', '/:uid', [middleware.assert.user], controllers.write.users.exists);
+	setupApiRoute(router, 'get', '/:uid', [...middlewares, middleware.assert.user], controllers.write.users.get);
 	setupApiRoute(router, 'put', '/:uid', [...middlewares, middleware.assert.user], controllers.write.users.update);
 	setupApiRoute(router, 'delete', '/:uid', [...middlewares, middleware.assert.user], controllers.write.users.delete);
+	setupApiRoute(router, 'put', '/:uid/picture', [...middlewares, middleware.assert.user], controllers.write.users.changePicture);
 	setupApiRoute(router, 'delete', '/:uid/content', [...middlewares, middleware.assert.user], controllers.write.users.deleteContent);
 	setupApiRoute(router, 'delete', '/:uid/account', [...middlewares, middleware.assert.user], controllers.write.users.deleteAccount);
 
@@ -34,16 +36,23 @@ function authenticatedRoutes() {
 	setupApiRoute(router, 'put', '/:uid/ban', [...middlewares, middleware.assert.user], controllers.write.users.ban);
 	setupApiRoute(router, 'delete', '/:uid/ban', [...middlewares, middleware.assert.user], controllers.write.users.unban);
 
+	setupApiRoute(router, 'put', '/:uid/mute', [...middlewares, middleware.assert.user], controllers.write.users.mute);
+	setupApiRoute(router, 'delete', '/:uid/mute', [...middlewares, middleware.assert.user], controllers.write.users.unmute);
+
 	setupApiRoute(router, 'post', '/:uid/tokens', [...middlewares, middleware.assert.user], controllers.write.users.generateToken);
 	setupApiRoute(router, 'delete', '/:uid/tokens/:token', [...middlewares, middleware.assert.user], controllers.write.users.deleteToken);
 
 	setupApiRoute(router, 'delete', '/:uid/sessions/:uuid', [...middlewares, middleware.assert.user], controllers.write.users.revokeSession);
 
-	// Shorthand route to access user routes by userslug
-	router.all('/+bySlug/:userslug*?', [], controllers.write.users.redirectBySlug);
-
 	setupApiRoute(router, 'post', '/:uid/invites', middlewares, controllers.write.users.invite);
 	setupApiRoute(router, 'get', '/:uid/invites/groups', [...middlewares, middleware.assert.user], controllers.write.users.getInviteGroups);
+
+	setupApiRoute(router, 'get', '/:uid/emails', [...middlewares, middleware.assert.user], controllers.write.users.listEmails);
+	setupApiRoute(router, 'get', '/:uid/emails/:email', [...middlewares, middleware.assert.user], controllers.write.users.getEmail);
+	setupApiRoute(router, 'post', '/:uid/emails/:email/confirm', [...middlewares, middleware.assert.user], controllers.write.users.confirmEmail);
+
+	// Shorthand route to access user routes by userslug
+	router.all('/+bySlug/:userslug*?', [], controllers.write.users.redirectBySlug);
 }
 
 module.exports = function () {

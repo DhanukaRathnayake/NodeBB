@@ -7,7 +7,8 @@ const meta = require('../meta');
 const privileges = require('../privileges');
 
 const apiHelpers = require('./helpers');
-const doTopicAction = apiHelpers.doTopicAction;
+
+const { doTopicAction } = apiHelpers;
 
 const websockets = require('../socket.io');
 const socketHelpers = require('../socket.io/helpers');
@@ -19,7 +20,12 @@ topicsAPI.get = async function (caller, data) {
 		privileges.topics.get(data.tid, caller.uid),
 		topics.getTopicData(data.tid),
 	]);
-	if (!topic || !userPrivileges.read || !userPrivileges['topics:read'] || (topic.deleted && !userPrivileges.view_deleted)) {
+	if (
+		!topic ||
+		!userPrivileges.read ||
+		!userPrivileges['topics:read'] ||
+		!privileges.topics.canViewDeletedScheduled(topic, userPrivileges)
+	) {
 		return null;
 	}
 
@@ -33,10 +39,7 @@ topicsAPI.create = async function (caller, data) {
 
 	const payload = { ...data };
 	payload.tags = payload.tags || [];
-	payload.uid = caller.uid;
-	payload.req = apiHelpers.buildReqObject(caller);
-	payload.timestamp = Date.now();
-	payload.fromQueue = false;
+	apiHelpers.setDefaultPostData(caller, payload);
 
 	// Blacklist & Post Queue
 	await meta.blacklist.test(caller.ip);
@@ -57,16 +60,11 @@ topicsAPI.create = async function (caller, data) {
 };
 
 topicsAPI.reply = async function (caller, data) {
-	var payload = {
-		tid: data.tid,
-		uid: caller.uid,
-		req: apiHelpers.buildReqObject(caller),	// For IP recording
-		content: data.content,
-		timestamp: Date.now(),
-		fromQueue: false,
-	};
-
-	if (data.toPid) { payload.toPid = data.toPid; }
+	if (!data || !data.tid || (meta.config.minimumPostLength !== 0 && !data.content)) {
+		throw new Error('[[error:invalid-data]]');
+	}
+	const payload = { ...data };
+	apiHelpers.setDefaultPostData(caller, payload);
 
 	// Blacklist & Post Queue
 	await meta.blacklist.test(caller.ip);
@@ -76,7 +74,7 @@ topicsAPI.reply = async function (caller, data) {
 		return queueObj;
 	}
 
-	const postData = await topics.reply(payload);	// postData seems to be a subset of postObj, refactor?
+	const postData = await topics.reply(payload); // postData seems to be a subset of postObj, refactor?
 	const postObj = await posts.getPostSummaryByPids([postData.pid], caller.uid, {});
 
 	const result = {

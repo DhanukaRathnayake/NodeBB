@@ -5,9 +5,13 @@ define('forum/topic/threadTools', [
 	'components',
 	'translator',
 	'handleBack',
+	'forum/topic/posts',
 	'api',
-], function (components, translator, handleBack, api) {
-	var ThreadTools = {};
+	'hooks',
+	'bootbox',
+	'alerts',
+], function (components, translator, handleBack, posts, api, hooks, bootbox, alerts) {
+	const ThreadTools = {};
 
 	ThreadTools.init = function (tid, topicContainer) {
 		renderMenu(topicContainer);
@@ -48,11 +52,25 @@ define('forum/topic/threadTools', [
 			return false;
 		});
 
+		topicContainer.on('click', '[component="topic/event/delete"]', function () {
+			const eventId = $(this).attr('data-topic-event-id');
+			const eventEl = $(this).parents('[component="topic/event"]');
+			bootbox.confirm('[[topic:delete-event-confirm]]', (ok) => {
+				if (ok) {
+					api.del(`/topics/${tid}/events/${eventId}`, {})
+						.then(function () {
+							eventEl.remove();
+						})
+						.catch(alerts.error);
+				}
+			});
+		});
+
 		// todo: should also use topicCommand, but no write api call exists for this yet
 		topicContainer.on('click', '[component="topic/mark-unread"]', function () {
 			socket.emit('topics.markUnread', tid, function (err) {
 				if (err) {
-					return app.alertError(err);
+					return alerts.error(err);
 				}
 
 				if (app.previousUrl && !app.previousUrl.match('^/topic')) {
@@ -63,18 +81,18 @@ define('forum/topic/threadTools', [
 					ajaxify.go('category/' + ajaxify.data.category.slug, handleBack.onBackClicked);
 				}
 
-				app.alertSuccess('[[topic:mark_unread.success]]');
+				alerts.success('[[topic:mark_unread.success]]');
 			});
 			return false;
 		});
 
 		topicContainer.on('click', '[component="topic/mark-unread-for-all"]', function () {
-			var btn = $(this);
+			const btn = $(this);
 			socket.emit('topics.markAsUnreadForAll', [tid], function (err) {
 				if (err) {
-					return app.alertError(err.message);
+					return alerts.error(err);
 				}
-				app.alertSuccess('[[topic:markAsUnreadForAll.success]]');
+				alerts.success('[[topic:markAsUnreadForAll.success]]');
 				btn.parents('.thread-tools.open').find('.dropdown-toggle').trigger('click');
 			});
 			return false;
@@ -118,7 +136,7 @@ define('forum/topic/threadTools', [
 		function changeWatching(type, state = 1) {
 			const method = state ? 'put' : 'del';
 			api[method](`/topics/${tid}/${type}`, {}, () => {
-				var message = '';
+				let message = '';
 				if (type === 'follow') {
 					message = state ? '[[topic:following_topic.message]]' : '[[topic:not_following_topic.message]]';
 				} else if (type === 'ignore') {
@@ -132,16 +150,16 @@ define('forum/topic/threadTools', [
 
 				setFollowState(type);
 
-				app.alert({
+				alerts.alert({
 					alert_id: 'follow_thread',
 					message: message,
 					type: 'success',
 					timeout: 5000,
 				});
 
-				$(window).trigger('action:topics.changeWatching', { tid: tid, type: type });
+				hooks.fire('action:topics.changeWatching', { tid: tid, type: type });
 			}, () => {
-				app.alert({
+				alerts.alert({
 					type: 'danger',
 					alert_id: 'topic_follow',
 					title: '[[global:please_log_in]]',
@@ -156,19 +174,19 @@ define('forum/topic/threadTools', [
 
 	function renderMenu(container) {
 		container.on('show.bs.dropdown', '.thread-tools', function () {
-			var $this = $(this);
-			var dropdownMenu = $this.find('.dropdown-menu');
+			const $this = $(this);
+			const dropdownMenu = $this.find('.dropdown-menu');
 			if (dropdownMenu.html()) {
 				return;
 			}
 
 			socket.emit('topics.loadTopicTools', { tid: ajaxify.data.tid, cid: ajaxify.data.cid }, function (err, data) {
 				if (err) {
-					return app.alertError(err);
+					return alerts.error(err);
 				}
 				app.parseAndTranslate('partials/topic/topic-menu-list', data, function (html) {
 					dropdownMenu.html(html);
-					$(window).trigger('action:topic.tools.load', {
+					hooks.fire('action:topic.tools.load', {
 						element: dropdownMenu,
 					});
 				});
@@ -186,7 +204,7 @@ define('forum/topic/threadTools', [
 			if (ok) {
 				api[method](`/topics/${tid}${path}`, body)
 					.then(onComplete)
-					.catch(app.alertError);
+					.catch(alerts.error);
 			}
 		};
 
@@ -238,7 +256,7 @@ define('forum/topic/threadTools', [
 								body.expiry = expiry.getTime();
 								onSuccess();
 							} else {
-								app.alertError('[[error:invalid-date]]');
+								alerts.error('[[error:invalid-date]]');
 							}
 						},
 					},
@@ -248,17 +266,17 @@ define('forum/topic/threadTools', [
 	};
 
 	ThreadTools.setLockedState = function (data) {
-		var threadEl = components.get('topic');
+		const threadEl = components.get('topic');
 		if (parseInt(data.tid, 10) !== parseInt(threadEl.attr('data-tid'), 10)) {
 			return;
 		}
 
-		var isLocked = data.isLocked && !ajaxify.data.privileges.isAdminOrMod;
+		const isLocked = data.isLocked && !ajaxify.data.privileges.isAdminOrMod;
 
 		components.get('topic/lock').toggleClass('hidden', data.isLocked).parent().attr('hidden', data.isLocked ? '' : null);
 		components.get('topic/unlock').toggleClass('hidden', !data.isLocked).parent().attr('hidden', !data.isLocked ? '' : null);
 
-		var hideReply = !!((data.isLocked || ajaxify.data.deleted) && !ajaxify.data.privileges.isAdminOrMod);
+		const hideReply = !!((data.isLocked || ajaxify.data.deleted) && !ajaxify.data.privileges.isAdminOrMod);
 
 		components.get('topic/reply/container').toggleClass('hidden', hideReply);
 		components.get('topic/reply/locked').toggleClass('hidden', ajaxify.data.privileges.isAdminOrMod || !data.isLocked || ajaxify.data.deleted);
@@ -268,13 +286,15 @@ define('forum/topic/threadTools', [
 
 		threadEl.find('[component="post"][data-uid="' + app.user.uid + '"].deleted [component="post/tools"]').toggleClass('hidden', isLocked);
 
-		$('.topic-header [component="topic/locked"]').toggleClass('hidden', !data.isLocked);
+		$('[component="topic/labels"] [component="topic/locked"]').toggleClass('hidden', !data.isLocked);
 		$('[component="post/tools"] .dropdown-menu').html('');
 		ajaxify.data.locked = data.isLocked;
+
+		posts.addTopicEvents(data.events);
 	};
 
 	ThreadTools.setDeleteState = function (data) {
-		var threadEl = components.get('topic');
+		const threadEl = components.get('topic');
 		if (parseInt(data.tid, 10) !== parseInt(threadEl.attr('data-tid'), 10)) {
 			return;
 		}
@@ -294,7 +314,7 @@ define('forum/topic/threadTools', [
 				html.find('.timeago').timeago();
 			});
 		}
-		var hideReply = data.isDelete && !ajaxify.data.privileges.isAdminOrMod;
+		const hideReply = data.isDelete && !ajaxify.data.privileges.isAdminOrMod;
 
 		components.get('topic/reply/container').toggleClass('hidden', hideReply);
 		components.get('topic/reply/locked').toggleClass('hidden', ajaxify.data.privileges.isAdminOrMod || !ajaxify.data.locked || data.isDelete);
@@ -302,30 +322,35 @@ define('forum/topic/threadTools', [
 
 		threadEl.toggleClass('deleted', data.isDelete);
 		ajaxify.data.deleted = data.isDelete ? 1 : 0;
+
+		posts.addTopicEvents(data.events);
 	};
 
 
 	ThreadTools.setPinnedState = function (data) {
-		var threadEl = components.get('topic');
+		const threadEl = components.get('topic');
 		if (parseInt(data.tid, 10) !== parseInt(threadEl.attr('data-tid'), 10)) {
 			return;
 		}
 
 		components.get('topic/pin').toggleClass('hidden', data.pinned).parent().attr('hidden', data.pinned ? '' : null);
 		components.get('topic/unpin').toggleClass('hidden', !data.pinned).parent().attr('hidden', !data.pinned ? '' : null);
-		var icon = $('.topic-header [component="topic/pinned"]');
+		const icon = $('[component="topic/labels"] [component="topic/pinned"]');
 		icon.toggleClass('hidden', !data.pinned);
 		if (data.pinned) {
-			icon.translateAttr('title', data.pinExpiry && data.pinExpiryISO ?
-				'[[topic:pinned-with-expiry, ' + data.pinExpiryISO + ']]' :
-				'[[topic:pinned]]'
-			);
+			icon.translateAttr('title', (
+				data.pinExpiry && data.pinExpiryISO ?
+					'[[topic:pinned-with-expiry, ' + data.pinExpiryISO + ']]' :
+					'[[topic:pinned]]'
+			));
 		}
 		ajaxify.data.pinned = data.pinned;
+
+		posts.addTopicEvents(data.events);
 	};
 
 	function setFollowState(state) {
-		var titles = {
+		const titles = {
 			follow: '[[topic:watching]]',
 			unfollow: '[[topic:not-watching]]',
 			ignore: '[[topic:ignoring]]',
@@ -336,7 +361,7 @@ define('forum/topic/threadTools', [
 				.tooltip('fixTitle');
 		});
 
-		var menu = components.get('topic/following/menu');
+		let menu = components.get('topic/following/menu');
 		menu.toggleClass('hidden', state !== 'follow');
 		components.get('topic/following/check').toggleClass('fa-check', state === 'follow');
 

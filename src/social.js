@@ -1,5 +1,6 @@
 'use strict';
 
+const _ = require('lodash');
 const plugins = require('./plugins');
 const db = require('./database');
 
@@ -9,7 +10,7 @@ social.postSharing = null;
 
 social.getPostSharing = async function () {
 	if (social.postSharing) {
-		return social.postSharing;
+		return _.cloneDeep(social.postSharing);
 	}
 
 	let networks = [
@@ -26,12 +27,12 @@ social.getPostSharing = async function () {
 	];
 	networks = await plugins.hooks.fire('filter:social.posts', networks);
 	const activated = await db.getSetMembers('social:posts.activated');
-	networks.forEach(function (network) {
+	networks.forEach((network) => {
 		network.activated = activated.includes(network.id);
 	});
 
 	social.postSharing = networks;
-	return networks;
+	return _.cloneDeep(networks);
 };
 
 social.getActivePostSharing = async function () {

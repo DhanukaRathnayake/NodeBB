@@ -3,10 +3,6 @@
 const prompt = require('prompt');
 const winston = require('winston');
 
-const util = require('util');
-
-const promptGet = util.promisify((schema, callback) => prompt.get(schema, callback));
-
 const questions = {
 	redis: require('../src/database/redis').questions,
 	mongo: require('../src/database/mongo').questions,
@@ -14,7 +10,7 @@ const questions = {
 };
 
 module.exports = async function (config) {
-	winston.info('\nNow configuring ' + config.database + ' database:');
+	winston.info(`\nNow configuring ${config.database} database:`);
 	const databaseConfig = await getDatabaseConfig(config);
 	return saveDatabaseConfig(config, databaseConfig);
 };
@@ -28,19 +24,19 @@ async function getDatabaseConfig(config) {
 		if (config['redis:host'] && config['redis:port']) {
 			return config;
 		}
-		return await promptGet(questions.redis);
+		return await prompt.get(questions.redis);
 	} else if (config.database === 'mongo') {
 		if ((config['mongo:host'] && config['mongo:port']) || config['mongo:uri']) {
 			return config;
 		}
-		return await promptGet(questions.mongo);
+		return await prompt.get(questions.mongo);
 	} else if (config.database === 'postgres') {
 		if (config['postgres:host'] && config['postgres:port']) {
 			return config;
 		}
-		return await promptGet(questions.postgres);
+		return await prompt.get(questions.postgres);
 	}
-	throw new Error('unknown database : ' + config.database);
+	throw new Error(`unknown database : ${config.database}`);
 }
 
 function saveDatabaseConfig(config, databaseConfig) {
@@ -79,11 +75,11 @@ function saveDatabaseConfig(config, databaseConfig) {
 			ssl: databaseConfig['postgres:ssl'],
 		};
 	} else {
-		throw new Error('unknown database : ' + config.database);
+		throw new Error(`unknown database : ${config.database}`);
 	}
 
 	const allQuestions = questions.redis.concat(questions.mongo).concat(questions.postgres);
-	for (var x = 0; x < allQuestions.length; x += 1) {
+	for (let x = 0; x < allQuestions.length; x += 1) {
 		delete config[allQuestions[x].name];
 	}
 
